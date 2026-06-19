@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EVEZ Tamagotchi Builder</title>
+    <style>
+        :root {
+            --bg-color: #0a0e17;
+            --surface-color: #121826;
+            --primary-accent: #00e5ff;
+            --secondary-accent: #ff0055;
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+            --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            --border-radius: 16px;
+            --energy: 100%;
+        }
+
+        body {
+            margin: 0;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: var(--font-family);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            grid-template-rows: auto 1fr auto;
+            gap: 24px;
+            width: 100%;
+            max-width: 1400px;
+            height: 95vh;
+            padding: 24px;
+            box-sizing: border-box;
+        }
+
+        @media (max-width: 1024px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+                height: auto;
+            }
+        }
+
+        .panel {
+            background-color: var(--surface-color);
+            border-radius: var(--border-radius);
+            padding: 24px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.05);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel-title {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--primary-accent);
+            margin-bottom: 16px;
+            font-weight: 600;
+        }
+
+        /* Chamber (Tamagotchi) */
+        .chamber {
+            grid-row: span 2;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .orb {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, var(--primary-accent), #003355);
+            box-shadow: 0 0 40px rgba(0, 229, 255, 0.4);
+            animation: pulse 4s infinite ease-in-out;
+            margin-bottom: 32px;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 40px rgba(0, 229, 255, 0.4); }
+            50% { transform: scale(1.05); box-shadow: 0 0 60px rgba(0, 229, 255, 0.6); }
+        }
+
+        .stats {
+            width: 100%;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background-color: rgba(255,255,255,0.1);
+            border-radius: 3px;
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background-color: var(--primary-accent);
+            width: var(--energy);
+            transition: width 0.3s ease;
+        }
+
+        /* Mission Control */
+        .mission-input {
+            width: 100%;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: white;
+            padding: 16px;
+            border-radius: 8px;
+            resize: none;
+            font-family: var(--font-family);
+            outline: none;
+            box-sizing: border-box;
+            height: 100px;
+            margin-bottom: 16px;
+        }
+
+        .btn {
+            background-color: var(--primary-accent);
+            color: #001f29;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            box-shadow: 0 0 15px var(--primary-accent);
+        }
+
+        /* Log / Swarm */
+        .log-container {
+            flex-grow: 1;
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 16px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .log-entry { margin-bottom: 8px; }
+        .log-entry.process { color: var(--primary-accent); }
+        .log-entry.error { color: var(--secondary-accent); }
+
+    </style>
+</head>
+<body>
+
+    <div class="dashboard">
+        <!-- Main Area: Missions & Swarm -->
+        <div style="display: flex; flex-direction: column; gap: 24px;">
+            <div class="panel">
+                <div class="panel-title">Mission Input Console</div>
+                <textarea class="mission-input" id="missionInput" placeholder="Enter high-level orchestrator objective..."></textarea>
+                <button class="btn" onclick="startMission()">DEPLOY WORKER</button>
+            </div>
+
+            <div class="panel" style="flex-grow: 1;">
+                <div class="panel-title">Browser Swarm / Log Activity</div>
+                <div class="log-container" id="logBox">
+                    <div class="log-entry">> System initialized. Waiting for prompt payload.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar: Tamagotchi Agent Chamber -->
+        <div class="panel chamber">
+            <div class="panel-title" style="align-self: flex-start;">Worker Chamber</div>
+            <div class="orb" id="workerOrb"></div>
+            
+            <div class="stats">
+                <div class="stat-row"><span>Energy</span><span id="energyTxt">100%</span></div>
+                <div class="progress-bar"><div class="progress-fill" id="energyFill" style="--energy: 100%;"></div></div>
+
+                <div class="stat-row"><span>Entropy</span><span id="entropyTxt">12%</span></div>
+                <div class="progress-bar"><div class="progress-fill" id="entropyFill" style="background-color: var(--secondary-accent); --energy: 12%;"></div></div>
+
+                <div class="stat-row"><span>Focus</span><span id="focusTxt">98%</span></div>
+                <div class="progress-bar"><div class="progress-fill" id="focusFill" style="background-color: #a855f7; --energy: 98%;"></div></div>
+            </div>
+        </div>
+        
+        <!-- Kernel Dashboard panel -->
+        <div class="panel" style="grid-column: 1 / -1; height: auto;">
+            <kernel-dashboard></kernel-dashboard>
+        </div>
+    </div>
+
+    <script type="module">
+        import { kernel } from './src/kernel.js';
+        import './src/components/Dashboard.js';
+        import { TDSEIntegrator } from './src/modules/physics.js';
+
+        // Bind kernel globally for testing
+        window.kernel = kernel;
+    </script>
+    <script>
+        let isRunning = false;
+        
+        function updateLog(message, type = '') {
+            const logBox = document.getElementById('logBox');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.innerText = `> ${message}`;
+            logBox.appendChild(entry);
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        function startMission() {
+            if (isRunning) return;
+            const input = document.getElementById('missionInput').value;
+            if (!input.trim()) return;
+
+            isRunning = true;
+            document.getElementById('energyFill').style.setProperty('--energy', '85%');
+            document.getElementById('energyTxt').innerText = '85%';
+            document.getElementById('workerOrb').style.boxShadow = '0 0 60px rgba(0, 229, 255, 0.8)';
+
+            updateLog(`Mission Accepted: ${input}`, 'process');
+            updateLog('Splitting into concurrent sub-agent browser swarms...', 'process');
+
+            let steps = [
+                "Decomposing goals...",
+                "Spawning Tab [0x1] - Reconnaissance",
+                "Spawning Tab [0x2] - Synthesis",
+                "Self-reflection invariant registry updated.",
+                "Deploying staging candidates...",
+                "Mission Complete. Awaiting next command."
+            ];
+
+            // Initialize a projection if not present
+            if (window.kernel) {
+                window.kernel.subscribeProjection('MissionControl', (state, event) => {
+                    state = state || { currentStep: '', completed: false };
+                    if (event.type === 'MISSION_STEP') state.currentStep = event.payload.step;
+                    if (event.type === 'MISSION_COMPLETE') state.completed = true;
+                    return state;
+                }, { currentStep: 'Idle', completed: false });
+
+                window.kernel.appendEvent({
+                    type: 'MISSION_START',
+                    domainId: 'MissionControl',
+                    payload: { mission: input }
+                });
+            }
+
+            let delay = 1000;
+            steps.forEach((step, index) => {
+                setTimeout(() => {
+                    updateLog(step, index === steps.length - 1 ? 'process' : '');
+                    
+                    if (window.kernel) {
+                        if (index === steps.length - 1) {
+                            window.kernel.appendEvent({
+                                type: 'MISSION_COMPLETE',
+                                domainId: 'MissionControl',
+                                payload: { status: 'Awaiting next command' }
+                            });
+                        } else {
+                            window.kernel.appendEvent({
+                                type: 'MISSION_STEP',
+                                domainId: 'MissionControl',
+                                payload: { step: step }
+                            });
+                        }
+                    }
+
+                    if (index === steps.length - 1) {
+                        isRunning = false;
+                        document.getElementById('workerOrb').style.boxShadow = '0 0 40px rgba(0, 229, 255, 0.4)';
+                    }
+                }, delay * (index + 1));
+            });
+        }
+    </script>
+</body>
+</html>

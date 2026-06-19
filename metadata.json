@@ -1,0 +1,6 @@
+{
+  "name": "God AI Deluxe",
+  "description": "God AI Task Execution Deluxe Ultra Extra - A comprehensive hub for managing OpenClaw resources, Gemini tokens, and system telemetry with active Gemini quota alerting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
