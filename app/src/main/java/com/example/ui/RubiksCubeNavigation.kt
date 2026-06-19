@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -37,7 +38,7 @@ enum class CubeFace(val title: String, val color: Color, val icon: androidx.comp
 }
 
 @Composable
-fun RubiksCubeNavigation(modifier: Modifier = Modifier, onFaceClick: (String) -> Unit = {}) {
+fun RubiksCubeNavigation(modifier: Modifier = Modifier, onFaceClick: (String) -> Unit = {}, onFaceDoubleClick: (String) -> Unit = {}) {
     var rotationX by remember { mutableFloatStateOf(0f) }
     var rotationY by remember { mutableFloatStateOf(0f) }
     var targetRotationX by remember { mutableFloatStateOf(0f) }
@@ -179,7 +180,12 @@ fun RubiksCubeNavigation(modifier: Modifier = Modifier, onFaceClick: (String) ->
                     .clip(RoundedCornerShape(12.dp))
                     .background(Color(0xFF0F172A).copy(alpha = 0.95f))
                     .border(2.dp, activeFace.color.copy(alpha = cardAlpha.coerceIn(0.2f, 1f)), RoundedCornerShape(12.dp))
-                    .clickable { onFaceClick(activeFace.id) }
+                    .pointerInput(activeFace.id) {
+                        detectTapGestures(
+                            onTap = { onFaceClick(activeFace.id) },
+                            onDoubleTap = { onFaceDoubleClick(activeFace.id) }
+                        )
+                    }
                     .padding(16.dp),
                 contentAlignment = Alignment.Center
             ) {

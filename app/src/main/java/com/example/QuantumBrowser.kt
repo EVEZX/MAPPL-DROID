@@ -6,6 +6,7 @@ import android.webkit.WebViewClient
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -50,6 +51,14 @@ fun QuantumBrowserDialog(database: AppDatabase, onClose: () -> Unit) {
     var showGemini by remember { mutableStateOf(false) }
     var geminiResponse by remember { mutableStateOf("") }
     var isLoadingGemini by remember { mutableStateOf(false) }
+    var customPrompt by remember { mutableStateOf("") }
+    
+    val autoPrompts = listOf(
+        "Summarize the key information.",
+        "What acts as the entropy void forming context here?",
+        "Check for absent info and spectral synapsis.",
+        "Cross-reference with previous history."
+    )
 
     val scope = rememberCoroutineScope()
     val savedSessions by database.browserSessionDao().getAllSessions().collectAsStateWithLifecycle(initialValue = emptyList())
@@ -316,9 +325,34 @@ fun QuantumBrowserDialog(database: AppDatabase, onClose: () -> Unit) {
             textContentColor = TextColor,
             title = { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = Color(0xFFAA00FF)); Spacer(modifier = Modifier.width(8.dp)); Text("Gemini Page Intelligence") } },
             text = {
-                Column {
-                    Text("Ask Gemini about the current page content:", color = SubTextColor, style = MaterialTheme.typography.bodySmall)
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text("AutoNav Agent Commands:", color = SubTextColor, style = MaterialTheme.typography.bodySmall)
                     Spacer(modifier = Modifier.height(8.dp))
+                    
+                    autoPrompts.forEach { prompt ->
+                        TextButton(
+                            onClick = { customPrompt = prompt },
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                            colors = ButtonDefaults.textButtonColors(contentColor = AccentColor)
+                        ) {
+                            Text(prompt, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Start)
+                        }
+                    }
+                    
+                    OutlinedTextField(
+                        value = customPrompt,
+                        onValueChange = { customPrompt = it },
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        label = { Text("Custom auto-nav prompt") },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentColor,
+                            unfocusedBorderColor = BorderColor,
+                            focusedTextColor = TextColor,
+                            unfocusedTextColor = TextColor
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
                     if (isLoadingGemini) {
                         CircularProgressIndicator(color = AccentColor, modifier = Modifier.align(Alignment.CenterHorizontally))
                     } else if (geminiResponse.isNotEmpty()) {
@@ -333,8 +367,9 @@ fun QuantumBrowserDialog(database: AppDatabase, onClose: () -> Unit) {
                         scope.launch {
                             try {
                                 val shortContext = pageContent.take(3000)
+                                val query = if (customPrompt.isNotBlank()) customPrompt else "Summarize the key information."
                                 val request = GenerateContentRequest(
-                                    contents = listOf(Content(parts = listOf(Part("Summarize the key information from this webpage content comprehensively but concisely: $shortContext")), role = "user"))
+                                    contents = listOf(Content(parts = listOf(Part("Context from history can always form entropy void and info absent spectral synapsis. Using webpage content: $shortContext\n\nPrompt: $query")), role = "user"))
                                 )
                                 val response = GeminiApi.service.generateContent(
                                     url = "v1beta/models/gemini-3.5-flash:generateContent",
@@ -350,7 +385,7 @@ fun QuantumBrowserDialog(database: AppDatabase, onClose: () -> Unit) {
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = AccentColor, contentColor = Color(0xFF003355))
                 ) {
-                    Text("Summarize Page", fontWeight = FontWeight.Bold)
+                    Text("Execute", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
