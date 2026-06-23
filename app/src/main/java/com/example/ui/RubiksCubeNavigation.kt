@@ -11,6 +11,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -31,9 +32,9 @@ import kotlin.math.roundToInt
 enum class CubeFace(val title: String, val color: Color, val icon: androidx.compose.ui.graphics.vector.ImageVector, val id: String) {
     FRONT("OpenClaw", Color(0xFFE53935), Icons.Filled.Dashboard, "OpenClaw"),
     BACK("Telemetry", Color(0xFF43A047), Icons.Filled.Timeline, "Telemetry"),
-    LEFT("Kernel Log", Color(0xFFFFB300), Icons.Filled.List, "Kernel"),
+    LEFT("Kernel Log", Color(0xFFFFB300), Icons.AutoMirrored.Filled.List, "Kernel"),
     RIGHT("EVEZ-OS", Color(0xFF1E88E5), Icons.Filled.Computer, "EVEZ"),
-    TOP("Gemini Agent", Color(0xFF8E24AA), Icons.Filled.Chat, "Gemini"),
+    TOP("Gemini Agent", Color(0xFF8E24AA), Icons.AutoMirrored.Filled.Chat, "Gemini"),
     BOTTOM("Settings", Color(0xFFF4511E), Icons.Filled.Settings, "Settings")
 }
 

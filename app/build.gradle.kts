@@ -121,3 +121,18 @@ dependencies {
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
 }
+
+tasks.register<Copy>("copyWebAssets") {
+    from("${rootDir}/evez-tamagotchi-builder.html")
+    from("${rootDir}/src") {
+        include("kernel.js")
+        include("components/Dashboard.js")
+        into("src")
+    }
+    into("${projectDir}/src/main/assets")
+}
+
+tasks.named("preBuild") {
+    dependsOn("copyWebAssets")
+}
+

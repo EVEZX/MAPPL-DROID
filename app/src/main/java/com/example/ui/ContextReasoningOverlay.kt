@@ -134,7 +134,7 @@ fun ContextReasoningOverlay() {
                     }
                     
                     Spacer(modifier = Modifier.height(16.dp))
-                    Divider(color = Color.DarkGray)
+                    HorizontalDivider(color = Color.DarkGray)
                     Spacer(modifier = Modifier.height(16.dp))
                     
                     Text("Agent Advice", color = Color.LightGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)

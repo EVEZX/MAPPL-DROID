@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -18,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalContext
@@ -51,11 +53,17 @@ import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -64,15 +72,30 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.Flow
 import androidx.compose.ui.Alignment
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     
     try {
-        val webViewCacheDir = java.io.File(cacheDir, "WebView/Default/HTTP Cache/Code Cache/js")
-        if (webViewCacheDir.exists()) {
-            webViewCacheDir.deleteRecursively()
+        FirebaseAuthManager.init(applicationContext)
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+    
+    try {
+        val jsCacheDir = java.io.File(cacheDir, "WebView/Default/HTTP Cache/Code Cache/js")
+        val wasmCacheDir = java.io.File(cacheDir, "WebView/Default/HTTP Cache/Code Cache/wasm")
+        if (!jsCacheDir.exists()) {
+            jsCacheDir.mkdirs()
+        }
+        if (!wasmCacheDir.exists()) {
+            wasmCacheDir.mkdirs()
         }
     } catch (e: Exception) {
         e.printStackTrace()
@@ -101,7 +124,11 @@ val SubTextColor = Color(0xFF8E9196)
 fun OpenClawDashboard() {
   var isChatOpen by remember { mutableStateOf(false) }
   var isBrowserOpen by remember { mutableStateOf(false) }
-  var isAuthMocked by remember { mutableStateOf(false) }
+  var showAuthDialog by remember { mutableStateOf(false) }
+  val firebaseUser by FirebaseAuthManager.currentUserState.collectAsStateWithLifecycle()
+  val simulatedEmail by FirebaseAuthManager.simulatedUserEmail.collectAsStateWithLifecycle()
+  val isFallbackMode by FirebaseAuthManager.isFallbackMode.collectAsStateWithLifecycle()
+  val authLogs by FirebaseAuthManager.authLogs.collectAsStateWithLifecycle()
   var isFabMenuOpen by remember { mutableStateOf(false) }
   var showVoiceDialog by remember { mutableStateOf(false) }
   var systemAlerts by remember { mutableStateOf(listOf("System initializing... Gemini quota scanners active.")) }
@@ -298,14 +325,18 @@ fun OpenClawDashboard() {
                   }
                   .padding(vertical = 12.dp)
 
-          when (index % 12) {
+          when (index % 13) {
               0 -> Column(modifier = mod) {
                   Spacer(modifier = Modifier.height(16.dp))
                   Text(text = "God AI Task Execution Deluxe Ultra Extra", style = MaterialTheme.typography.headlineLarge, color = Color.White)
                   Text(text = "v1.0-KILOCLAW-FULL • EVEZ-OS ACTIVE", style = MaterialTheme.typography.bodySmall, color = AccentColor)
               }
               1 -> Box(modifier = mod) { EvezOsIntegration() }
-              2 -> Box(modifier = mod) { AutomatedResourceInventory(database = database) }
+              2 -> Column(modifier = mod) {
+                  CloudResourceOrchestrationToolbar(database = database)
+                  Spacer(modifier = Modifier.height(16.dp))
+                  AutomatedResourceInventory(database = database)
+              }
               3 -> Box(modifier = mod) { ThreatIntelligenceRadar() }
               4 -> Box(modifier = mod) {
                   Box(
@@ -338,89 +369,44 @@ fun OpenClawDashboard() {
               }
               }
               5 -> Box(modifier = mod) { com.example.ui.KernelDashboardUI() }
-              6 -> Box(modifier = mod) {
-                  // SSH Gateway / Compute Node
-                  Card(
-          modifier = Modifier.fillMaxWidth(), 
-          colors = CardDefaults.cardColors(containerColor = CardColor),
-          shape = RoundedCornerShape(32.dp),
-          border = BorderStroke(1.dp, BorderColor)
-      ) {
-        Column(modifier = Modifier.padding(24.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
-                    Text(text = "COMPUTE VCM INSTANCE", style = MaterialTheme.typography.labelSmall, color = SubTextColor)
-                    Text(text = "openclaw-power-node", style = MaterialTheme.typography.titleLarge, color = AccentColor, fontWeight = FontWeight.Bold)
-                    Text(text = "us-central1-a • 16GB RAM", style = MaterialTheme.typography.bodySmall, color = SubTextColor)
-                }
-                Container(
-                    color = if (sshConnected) Color(0xFF003355) else BorderColor,
-                    textColor = AccentColor,
-                    text = if (sshConnected) "CONNECTED" else "STANDBY"
-                )
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                MetricsBox(modifier = Modifier.weight(1f), label = "GATEWAY PORT", value = "18789")
-                MetricsBox(modifier = Modifier.weight(1f), label = "LATENCY", value = if (sshConnected) "14ms" else "--", valueColor = Color(0xFF00FF00))
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            if (sshConnected) {
-                Surface(color = Color(0xFF0A1929), shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, Color(0xFF003355)), modifier = Modifier.fillMaxWidth()) {
-                    Row(modifier = Modifier.padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        Column {
-                            Text(text = "ACTIVE GATEWAY TOKEN", style = MaterialTheme.typography.labelSmall, color = AccentColor)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(text = gatewayToken, style = MaterialTheme.typography.bodyMedium, color = Color(0xFF00FF00), fontWeight = FontWeight.Bold, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-            Button(
-                onClick = { 
-                    sshConnected = !sshConnected 
-                    if (sshConnected) {
-                        gatewayToken = "oct_" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 16)
-                    } else {
-                        gatewayToken = "NOT_GENERATED"
-                    }
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = AccentColor, contentColor = Color(0xFF003355)),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth().height(56.dp)
-            ) {
-                Text(text = if (sshConnected) "DISCONNECT GATEWAY" else "⚡ FORCE SSH GATEWAY", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-            }
-        }
-    }
-}
-7 -> Box(modifier = mod) {
+              6 -> Box(modifier = mod) { com.example.ui.DeveloperParadiseDashboard() }
+              7 -> Box(modifier = mod) {
                   Column {
                       Text(text = "Identity & Persistence", style = MaterialTheme.typography.titleMedium, color = TextColor, fontWeight = FontWeight.Bold)
                       Spacer(modifier = Modifier.height(8.dp))
+                      val isLoggedIn = firebaseUser != null || simulatedEmail != null
+                      val connectionLabel = if (isLoggedIn) {
+                          if (isFallbackMode) "Simulated User:\n$simulatedEmail" else "Firebase User:\n$simulatedEmail"
+                      } else {
+                          "Tap to Sign In"
+                      }
+                      val syncLabel = if (isLoggedIn) {
+                          if (isFallbackMode) "Local Sandbox Session" else "Firestore Cloud Synced"
+                      } else {
+                          "Firebase Auth Disconnected"
+                      }
                       Card(
-          modifier = Modifier.fillMaxWidth().clickable { isAuthMocked = !isAuthMocked },
-          colors = CardDefaults.cardColors(containerColor = CardColor),
-          shape = RoundedCornerShape(24.dp),
-          border = BorderStroke(1.dp, BorderColor)
-      ) {
-          Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-              Icon(if (isAuthMocked) Icons.Filled.AccountCircle else Icons.Filled.Storage, contentDescription = null, tint = AccentColor, modifier = Modifier.size(40.dp))
-              Spacer(modifier = Modifier.width(16.dp))
-              Column(modifier = Modifier.weight(1f)) {
-                  Text(text = if (isAuthMocked) "Authenticated User\n(Firebase Active)" else "Tap to Sign In", style = MaterialTheme.typography.bodyMedium, color = AccentColor, fontWeight = FontWeight.Bold)
-                  Text(text = if (isAuthMocked) "Firestore Synced" else "Firebase Auth Disconnected", style = MaterialTheme.typography.bodySmall, color = SubTextColor)
-              }
-              if (isAuthMocked) {
-                  Container(color = Color(0xFF003355), textColor = AccentColor, text = "SECURE")
-              } else {
-                  Container(color = BorderColor, textColor = SubTextColor, text = "STANDBY")
-              }
-          }
+                          modifier = Modifier.fillMaxWidth().clickable { showAuthDialog = true },
+                          colors = CardDefaults.cardColors(containerColor = CardColor),
+                          shape = RoundedCornerShape(24.dp),
+                          border = BorderStroke(1.dp, BorderColor)
+                      ) {
+                          Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                              Icon(if (isLoggedIn) Icons.Filled.AccountCircle else Icons.Filled.Storage, contentDescription = null, tint = AccentColor, modifier = Modifier.size(40.dp))
+                              Spacer(modifier = Modifier.width(16.dp))
+                              Column(modifier = Modifier.weight(1f)) {
+                                  Text(text = connectionLabel, style = MaterialTheme.typography.bodyMedium, color = AccentColor, fontWeight = FontWeight.Bold)
+                                  Text(text = syncLabel, style = MaterialTheme.typography.bodySmall, color = SubTextColor)
+                              }
+                              if (isLoggedIn) {
+                                  Container(color = if (isFallbackMode) Color(0xFF423B0F) else Color(0xFF003355), textColor = if (isFallbackMode) Color(0xFFFFD54F) else AccentColor, text = if (isFallbackMode) "SANDBOX" else "SECURE")
+                              } else {
+                                  Container(color = BorderColor, textColor = SubTextColor, text = "STANDBY")
+                              }
+                          }
+                      }
                   }
               }
-}
               8 -> Box(modifier = mod) {
                   Column {
                       Text(text = "Model Token Hub", style = MaterialTheme.typography.titleMedium, color = TextColor, fontWeight = FontWeight.Bold)
@@ -433,7 +419,17 @@ fun OpenClawDashboard() {
       ) {
         Column(modifier = Modifier.padding(24.dp)) {
             providers.forEachIndexed { index, provider ->
-                ProviderRow(icon = provider.icon, name = provider.name, keyPreview = provider.keyPreview, iconColor = provider.iconColor, isActive = provider.isActive)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            val updated = provider.copy(isActive = !provider.isActive)
+                            providers = providers.toMutableList().apply { set(index, updated) }
+                            FirebaseAuthManager.pushProviderToCloud(updated)
+                        }
+                ) {
+                    ProviderRow(icon = provider.icon, name = provider.name, keyPreview = provider.keyPreview, iconColor = provider.iconColor, isActive = provider.isActive)
+                }
                 if (index < providers.size - 1) Spacer(modifier = Modifier.height(12.dp))
             }
             
@@ -453,6 +449,7 @@ fun OpenClawDashboard() {
     9 -> Box(modifier = mod) { com.example.ui.CognitosegrephonicsDna() }
     10 -> Box(modifier = mod) { com.example.ui.KociembaSelfCodingOptimizer() }
     11 -> Box(modifier = mod) { com.example.ui.SensoryAudioGeometries() }
+    12 -> Box(modifier = mod) { OpenClawGameSharkCheatCodeCenter() }
   }
 }
 }
@@ -505,13 +502,15 @@ if (showAddProviderDialog) {
                       onClick = {
                           if (newProviderName.isNotBlank() && newProviderKey.isNotBlank()) {
                               val preview = if (newProviderKey.length > 10) newProviderKey.substring(0, 10) + "..." else newProviderKey
-                              providers = providers + ProviderData(
+                              val newProvider = ProviderData(
                                   icon = newProviderName.firstOrNull()?.uppercase() ?: "?",
                                   name = newProviderName,
                                   keyPreview = preview,
                                   iconColor = Color(0xFFE2E2E6),
                                   isActive = true
                               )
+                              providers = providers + newProvider
+                              FirebaseAuthManager.pushProviderToCloud(newProvider)
                           }
                           showAddProviderDialog = false
                       },
@@ -542,77 +541,11 @@ if (showAddProviderDialog) {
   }
 
   if (showVoiceDialog) {
-      var voiceInput by remember { mutableStateOf("") }
-      var isListening by remember { mutableStateOf(true) }
-      var processing by remember { mutableStateOf(false) }
+      com.example.ui.AppVoiceAgentDialog(onClose = { showVoiceDialog = false })
+  }
 
-      AlertDialog(
-          onDismissRequest = { showVoiceDialog = false },
-          containerColor = CardColor,
-          titleContentColor = TextColor,
-          textContentColor = TextColor,
-          title = { Text(if (isListening) "Listening (A16 Hardware)..." else if (processing) "Processing..." else "Voice Command Recognized") },
-          text = {
-              Column {
-                  Text(text = "Try saying: 'Run that shit turbo' or 'what up my nigga computer'", color = SubTextColor, style = MaterialTheme.typography.bodySmall)
-                  Spacer(modifier = Modifier.height(16.dp))
-                  OutlinedTextField(
-                      value = voiceInput,
-                      onValueChange = { voiceInput = it },
-                      label = { Text("Simulate spoken text") },
-                      colors = OutlinedTextFieldDefaults.colors(
-                          unfocusedTextColor = TextColor, focusedTextColor = TextColor,
-                          focusedBorderColor = AccentColor, unfocusedBorderColor = BorderColor,
-                          focusedLabelColor = AccentColor, unfocusedLabelColor = SubTextColor
-                      ),
-                      modifier = Modifier.fillMaxWidth()
-                  )
-              }
-          },
-          confirmButton = {
-              Button(
-                  onClick = {
-                      isListening = false
-                      processing = true
-                      scope.launch {
-                          val normalizedInput = voiceInput.lowercase()
-                          if (normalizedInput.contains("turbo") || normalizedInput.contains("diagnostics") || normalizedInput.contains("shit")) {
-                              systemAlerts = systemAlerts + "Voice Command: Initiating deep diagnostics..."
-                              // Call API...
-                              try {
-                                  val request = GenerateContentRequest(
-                                      contents = listOf(Content(parts = listOf(Part("You are a system diagnostics AI for OpenClaw. Generate a 1 sentence status update for a manual deep scan across GCP resources.")), role = "user"))
-                                  )
-                                  val response = GeminiApi.service.generateContent(
-                                      url = "v1beta/models/gemini-3.5-flash:generateContent",
-                                      apiKey = BuildConfig.GEMINI_API_KEY,
-                                      request = request
-                                  )
-                                  val reply = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text ?: "Scan complete."
-                                  systemAlerts = systemAlerts + reply
-                              } catch (e: Exception) {
-                                  systemAlerts = systemAlerts + "Error: API Unreachable."
-                              }
-                          } else if (normalizedInput.contains("refresh") || normalizedInput.contains("computer")) {
-                              systemAlerts = systemAlerts + "Voice Command: Refreshed connections."
-                          } else {
-                              systemAlerts = systemAlerts + "Voice Command: Unrecognized ($voiceInput)"
-                          }
-                          showVoiceDialog = false
-                          processing = false
-                      }
-                  },
-                  colors = ButtonDefaults.buttonColors(containerColor = AccentColor, contentColor = Color(0xFF003355))
-              ) {
-                  Text("Prcs. Command", fontWeight = FontWeight.Bold)
-              }
-          },
-          dismissButton = {
-              TextButton(onClick = { showVoiceDialog = false }) {
-                  Text("Cancel", color = SubTextColor)
-              }
-          }
-      )
+  if (showAuthDialog) {
+      OpenClawAuthDialog(onDismiss = { showAuthDialog = false }, database = database, onUpdateProviders = { providers = it })
   }
 
   if (widenCognitionKeys != null) {
@@ -836,6 +769,7 @@ fun EvezOsIntegration() {
     var evezNexusActive by remember { mutableStateOf(true) }
     var evezartEngineActive by remember { mutableStateOf(false) }
     var evezxSecurityActive by remember { mutableStateOf(false) }
+    var evezVclActive by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     Text(text = "Evez-OS Core Integrations", style = MaterialTheme.typography.titleMedium, color = TextColor, fontWeight = FontWeight.Bold)
@@ -871,7 +805,16 @@ fun EvezOsIntegration() {
                 }
                 androidx.compose.material3.Switch(
                     checked = evezNexusActive,
-                    onCheckedChange = { evezNexusActive = it },
+                    onCheckedChange = { 
+                        evezNexusActive = it 
+                        com.example.Kernel.appendEvent(
+                            com.example.DomainEvent(
+                                type = "EVEZ_GATE_TOGGLE",
+                                domainId = "EvezOsManager",
+                                payload = mapOf("active" to it, "system" to "Evez-666 Logic Gate")
+                            )
+                        )
+                    },
                     colors = androidx.compose.material3.SwitchDefaults.colors(checkedThumbColor = Color(0xFFFF0055), checkedTrackColor = Color(0xFF550022))
                 )
             }
@@ -886,6 +829,13 @@ fun EvezOsIntegration() {
                     onCheckedChange = { 
                         evezartEngineActive = it
                         if(it) evezNexusActive = true 
+                        com.example.Kernel.appendEvent(
+                            com.example.DomainEvent(
+                                type = "EVEZART_ENGINE_TOGGLE",
+                                domainId = "EvezOsManager",
+                                payload = mapOf("active" to it, "system" to "Evezart UI / Graphic Engine")
+                            )
+                        )
                     },
                     colors = androidx.compose.material3.SwitchDefaults.colors(checkedThumbColor = Color(0xFFFF0055), checkedTrackColor = Color(0xFF550022))
                 )
@@ -901,9 +851,49 @@ fun EvezOsIntegration() {
                     onCheckedChange = { 
                         evezxSecurityActive = it
                         if(it) evezNexusActive = true 
+                        com.example.Kernel.appendEvent(
+                            com.example.DomainEvent(
+                                type = "EVEZX_SECURITY_TOGGLE",
+                                domainId = "EvezOsManager",
+                                payload = mapOf("active" to it, "system" to "Evezx Quantum Security")
+                            )
+                        )
                     },
                     colors = androidx.compose.material3.SwitchDefaults.colors(checkedThumbColor = Color(0xFFFF0055), checkedTrackColor = Color(0xFF550022))
                 )
+            }
+            // Subsystem 4 (Evez-VCL Visual Cognition Layers)
+            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column {
+                    Text(text = "Evez-VCL Visual Cognition Layers", color = if (evezVclActive) TextColor else SubTextColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                    Text(text = "Alpha/Beta optical pathways & neural overlays", color = SubTextColor, style = MaterialTheme.typography.bodySmall)
+                }
+                androidx.compose.material3.Switch(
+                    checked = evezVclActive,
+                    onCheckedChange = { 
+                        evezVclActive = it
+                        if(it) evezNexusActive = true 
+                        com.example.Kernel.appendEvent(
+                            com.example.DomainEvent(
+                                type = "EVEZ_VCL_TOGGLE",
+                                domainId = "EvezOsManager",
+                                payload = mapOf("active" to it, "system" to "Evez-VCL Visual Cognition Layers")
+                            )
+                        )
+                    },
+                    colors = androidx.compose.material3.SwitchDefaults.colors(checkedThumbColor = Color(0xFFFF0055), checkedTrackColor = Color(0xFF550022))
+                )
+            }
+
+            AnimatedVisibility(
+                visible = evezVclActive,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Column {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    com.example.ui.EvezVisualCognitionPanel(isActive = evezVclActive)
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -912,6 +902,14 @@ fun EvezOsIntegration() {
                     evezNexusActive = true
                     evezartEngineActive = true
                     evezxSecurityActive = true
+                    evezVclActive = true
+                    com.example.Kernel.appendEvent(
+                        com.example.DomainEvent(
+                            type = "EVEZ_FULL_ACQUIRE",
+                            domainId = "EvezOsManager",
+                            payload = mapOf("status" to "ALL_ONLINE")
+                        )
+                    )
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0A1929), contentColor = Color(0xFFFF0055)),
                 modifier = Modifier.fillMaxWidth()
@@ -1020,6 +1018,14 @@ fun AutomatedResourceInventory(database: AppDatabase) {
     var isScanning by remember { mutableStateOf(false) }
     val resourcesFound by database.resourceStateDao().getAllStates().collectAsStateWithLifecycle(initialValue = emptyList())
     val scope = rememberCoroutineScope()
+    
+    val activeUser by FirebaseAuthManager.simulatedUserEmail.collectAsStateWithLifecycle()
+    val isFallbackMode by FirebaseAuthManager.isFallbackMode.collectAsStateWithLifecycle()
+
+    var showAddCustomDialog by remember { mutableStateOf(false) }
+    var customName by remember { mutableStateOf("") }
+    var customStatus by remember { mutableStateOf("Provisioned") }
+    var customMetrics by remember { mutableStateOf("Optimal") }
 
     Text(text = "Automated Resource Inventory", style = MaterialTheme.typography.titleMedium, color = TextColor, fontWeight = FontWeight.Bold)
     Spacer(modifier = Modifier.height(8.dp))
@@ -1036,24 +1042,105 @@ fun AutomatedResourceInventory(database: AppDatabase) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(text = "Auto-Discovery", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold)
                 }
-                Container(
-                    color = if (isScanning) Color(0xFF003355) else BorderColor,
-                    textColor = if (isScanning) AccentColor else SubTextColor,
-                    text = if (isScanning) "SCANNING" else "READY"
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { showAddCustomDialog = true }) {
+                        Text("+ ADD CUSTOM", color = AccentColor, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                    }
+                    Container(
+                        color = if (isScanning) Color(0xFF003355) else BorderColor,
+                        textColor = if (isScanning) AccentColor else SubTextColor,
+                        text = if (isScanning) "SCANNING" else "READY"
+                    )
+                }
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            
+            if (activeUser != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Surface(
+                    color = if (isFallbackMode) Color(0xFF332B00) else Color(0xFF0D253F),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Info,
+                            contentDescription = null,
+                            tint = if (isFallbackMode) Color(0xFFFFD54F) else AccentColor,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isFallbackMode) "Secured locally as sandbox user: $activeUser" else "Authenticated! Cloud sync active for $activeUser",
+                            color = if (isFallbackMode) Color(0xFFFFD54F) else AccentColor,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
             
             if (resourcesFound.isEmpty()) {
                 Text("No resources scanned yet. Initiate discovery.", color = SubTextColor, style = MaterialTheme.typography.bodySmall)
             } else {
                 resourcesFound.forEach { res ->
-                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.Top) {
-                        Icon(androidx.compose.material.icons.Icons.Filled.Settings, contentDescription = null, tint = Color(0xFF00E5FF), modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(text = res.name, style = MaterialTheme.typography.bodyMedium, color = TextColor)
-                            Text(text = "Status: ${res.status}", style = MaterialTheme.typography.labelSmall, color = SubTextColor)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .background(Color(0x22000000), shape = RoundedCornerShape(8.dp))
+                            .padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(androidx.compose.material.icons.Icons.Filled.Settings, contentDescription = null, tint = Color(0xFF00E5FF), modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(text = res.name, style = MaterialTheme.typography.bodyMedium, color = TextColor, fontWeight = FontWeight.Bold)
+                                Text(text = "Status: ${res.status} | Metric: ${res.metrics}", style = MaterialTheme.typography.labelSmall, color = SubTextColor)
+                            }
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            // Cycle Status
+                            IconButton(
+                                onClick = {
+                                    scope.launch {
+                                        val cycleStatus = when (res.status) {
+                                            "Active" -> "Warning"
+                                            "Warning" -> "Disabled"
+                                            else -> "Active"
+                                        }
+                                        val cycleMetrics = when (res.metrics) {
+                                            "Normal" -> "High Latency"
+                                            "High Latency" -> "Optimal"
+                                            else -> "Normal"
+                                        }
+                                        val updated = res.copy(status = cycleStatus, metrics = cycleMetrics)
+                                        database.resourceStateDao().insertState(updated)
+                                        FirebaseAuthManager.pushResourceToCloud(updated, scope)
+                                    }
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(Icons.Filled.Refresh, contentDescription = "Cycle Status", tint = AccentColor, modifier = Modifier.size(16.dp))
+                            }
+                            
+                            // Delete
+                            IconButton(
+                                onClick = {
+                                    scope.launch {
+                                        database.resourceStateDao().deleteStateById(res.id)
+                                        FirebaseAuthManager.deleteResourceFromCloud(res.id)
+                                    }
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(Icons.Filled.Delete, contentDescription = "Delete config", tint = Color(0xFFFF5252), modifier = Modifier.size(16.dp))
+                            }
                         }
                     }
                 }
@@ -1067,7 +1154,7 @@ fun AutomatedResourceInventory(database: AppDatabase) {
                         scope.launch {
                             try {
                                 val request = GenerateContentRequest(
-                                    contents = listOf(Content(parts = listOf(Part("You are an automated resource discovery system for Evez-OS and Google Cloud. Generate a realistic comma-separated list of 3-4 fictional cloud or edge resources you just discovered without introductory text.")), role = "user"))
+                                    contents = listOf(Content(parts = listOf(Part("You are an automated resource discovery system for Evez-OS and Google Cloud. Generate a realistic comma-separated list of 3 fictional cloud or edge resources you just discovered without introductory text.")), role = "user"))
                                 )
                                 val response = GeminiApi.service.generateContent(
                                     url = "v1beta/models/gemini-3.5-flash:generateContent",
@@ -1075,17 +1162,29 @@ fun AutomatedResourceInventory(database: AppDatabase) {
                                     request = request
                                 )
                                 val reply = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text ?: "Compute VCM, Edge Node Alpha, Database Cluster"
-                                val newResources = reply.split(",").map { it.trim() }
+                                val newResources = reply.split(",").map { it.trim().trim('*', ' ', '\n', '\r', '"') }
                                 newResources.forEachIndexed { index, name ->
-                                    database.resourceStateDao().insertState(ResourceState(
-                                        id = "res_${System.currentTimeMillis()}_$index",
-                                        name = name,
-                                        status = "Active",
-                                        metrics = "Normal"
-                                    ))
+                                    if (name.isNotBlank()) {
+                                        val newState = ResourceState(
+                                            id = "res_${System.currentTimeMillis()}_$index",
+                                            name = name,
+                                            status = "Active",
+                                            metrics = "Normal"
+                                        )
+                                        database.resourceStateDao().insertState(newState)
+                                        FirebaseAuthManager.pushResourceToCloud(newState, scope)
+                                    }
                                 }
                             } catch (e: Exception) {
-                                // Fallback cached states are handled by Room DB
+                                val fallbackName = "Compute_Cluster_${(10..99).random()}"
+                                val newState = ResourceState(
+                                    id = "res_${System.currentTimeMillis()}",
+                                    name = fallbackName,
+                                    status = "Active",
+                                    metrics = "Normal"
+                                )
+                                database.resourceStateDao().insertState(newState)
+                                FirebaseAuthManager.pushResourceToCloud(newState, scope)
                             }
                             isScanning = false
                         }
@@ -1098,7 +1197,517 @@ fun AutomatedResourceInventory(database: AppDatabase) {
             }
         }
     }
+
+    if (showAddCustomDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddCustomDialog = false },
+            containerColor = CardColor,
+            titleContentColor = TextColor,
+            textContentColor = TextColor,
+            title = { Text("Configure Custom OpenClaw Resource", fontWeight = FontWeight.Bold, color = AccentColor) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = customName,
+                        onValueChange = { customName = it },
+                        label = { Text("Resource Configuration Name") },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentColor, unfocusedBorderColor = BorderColor,
+                            focusedTextColor = TextColor, unfocusedTextColor = TextColor
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = customStatus,
+                        onValueChange = { customStatus = it },
+                        label = { Text("Initial System Status") },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentColor, unfocusedBorderColor = BorderColor,
+                            focusedTextColor = TextColor, unfocusedTextColor = TextColor
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = customMetrics,
+                        onValueChange = { customMetrics = it },
+                        label = { Text("Telemetry Metric Tag") },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentColor, unfocusedBorderColor = BorderColor,
+                            focusedTextColor = TextColor, unfocusedTextColor = TextColor
+                        )
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (customName.isNotBlank()) {
+                            val targetState = ResourceState(
+                                id = "res_custom_${System.currentTimeMillis()}",
+                                name = customName,
+                                status = customStatus,
+                                metrics = customMetrics
+                            )
+                            scope.launch {
+                                database.resourceStateDao().insertState(targetState)
+                                FirebaseAuthManager.pushResourceToCloud(targetState, scope)
+                            }
+                            customName = ""
+                            showAddCustomDialog = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentColor, contentColor = Color(0xFF003355))
+                ) {
+                    Text("Provision Node", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddCustomDialog = false }) {
+                    Text("Cancel", color = SubTextColor)
+                }
+            }
+        )
+    }
 }
+
+@Composable
+fun CloudResourceOrchestrationToolbar(database: AppDatabase) {
+    val resourcesFound by database.resourceStateDao().getAllStates().collectAsStateWithLifecycle(initialValue = emptyList())
+    val scope = rememberCoroutineScope()
+    var selectedTargetId by remember { mutableStateOf("ALL") }
+    var consoleMsg by remember { mutableStateOf("Ready for operator instruction...") }
+    
+    val targetName = if (selectedTargetId == "ALL") "ALL ACTIVE CLUSTERS" else {
+        resourcesFound.find { it.id == selectedTargetId }?.name ?: "Unknown Node"
+    }
+
+    Text(
+        text = "Cloud Coalition Orchestration Toolbar",
+        style = MaterialTheme.typography.titleMedium,
+        color = TextColor,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(top = 16.dp)
+    )
+    Spacer(modifier = Modifier.height(8.dp))
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("cloud_orchestration_toolbar"),
+        colors = CardDefaults.cardColors(containerColor = CardColor),
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, BorderColor)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Header Slot
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Filled.Settings,
+                        contentDescription = "Cloud Controller Settings",
+                        tint = AccentColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Global Console Controller",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .background(Color(0xFF003355), shape = RoundedCornerShape(8.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "SYSTEM ACTIVE",
+                        color = AccentColor,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Scrollable Target Clusters Row
+            Text(
+                text = "SELECT COMPUTE TARGET ARCHITECTURE:",
+                style = MaterialTheme.typography.labelSmall,
+                color = SubTextColor,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // ALL NODES target button
+                val isAllSelected = selectedTargetId == "ALL"
+                Box(
+                    modifier = Modifier
+                        .background(
+                            color = if (isAllSelected) Color(0xFF0D253F) else Color(0x22000000),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .border(
+                            border = BorderStroke(
+                                1.dp,
+                                if (isAllSelected) AccentColor else BorderColor
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .clickable { selectedTargetId = "ALL" }
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .testTag("cloud_target_all_chip")
+                ) {
+                    Text(
+                        text = "⚡ ALL CLUSTERS",
+                        color = if (isAllSelected) Color.White else SubTextColor,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
+                    )
+                }
+
+                // Discovered resources target buttons
+                resourcesFound.forEach { res ->
+                    val isSelected = selectedTargetId == res.id
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                color = if (isSelected) Color(0xFF0D253F) else Color(0x22000000),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .border(
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isSelected) AccentColor else BorderColor
+                                ),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .clickable { selectedTargetId = res.id }
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                            .testTag("cloud_target_${res.id}_chip")
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = res.name,
+                                color = if (isSelected) Color.White else SubTextColor,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            // Status Dot
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .background(
+                                        color = when (res.status) {
+                                            "Active" -> Color(0xFF00FF00)
+                                            "Warning" -> Color(0xFFFFB74D)
+                                            else -> Color(0xFFFF5252)
+                                        },
+                                        shape = androidx.compose.foundation.shape.CircleShape
+                                    )
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Dynamic Live Orchestrator Control Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // START Action Button
+                Button(
+                    onClick = {
+                        scope.launch {
+                            val targetsToUpdate = if (selectedTargetId == "ALL") resourcesFound else resourcesFound.filter { it.id == selectedTargetId }
+                            if (targetsToUpdate.isEmpty()) {
+                                consoleMsg = "WARNING: No valid nodes identified to receive command."
+                                return@launch
+                            }
+                            targetsToUpdate.forEach { item ->
+                                val updated = item.copy(status = "Active", metrics = "Optimal")
+                                database.resourceStateDao().insertState(updated)
+                                FirebaseAuthManager.pushResourceToCloud(updated, scope)
+                            }
+                            consoleMsg = "SUCCESS: START signal activated for $targetName."
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .testTag("cloud_start_button"),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF1B5E20),
+                        contentColor = Color(0xFFC8E6C9)
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.PlayArrow,
+                        contentDescription = "Start targets",
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("START", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                }
+
+                // STOP Action Button
+                Button(
+                    onClick = {
+                        scope.launch {
+                            val targetsToUpdate = if (selectedTargetId == "ALL") resourcesFound else resourcesFound.filter { it.id == selectedTargetId }
+                            if (targetsToUpdate.isEmpty()) {
+                                consoleMsg = "WARNING: No systems to execute structural shutdown instruction."
+                                return@launch
+                            }
+                            targetsToUpdate.forEach { item ->
+                                val updated = item.copy(status = "Disabled", metrics = "Suspended")
+                                database.resourceStateDao().insertState(updated)
+                                FirebaseAuthManager.pushResourceToCloud(updated, scope)
+                            }
+                            consoleMsg = "HALTED: STOP command deployed to $targetName."
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .testTag("cloud_stop_button"),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFB71C1C),
+                        contentColor = Color(0xFFFFCDD2)
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Stop,
+                        contentDescription = "Stop targets",
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("STOP", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                }
+
+                // RESTART Action Button
+                Button(
+                    onClick = {
+                        scope.launch {
+                            val targetsToUpdate = if (selectedTargetId == "ALL") resourcesFound else resourcesFound.filter { it.id == selectedTargetId }
+                            if (targetsToUpdate.isEmpty()) {
+                                consoleMsg = "WARNING: No active connections established for cyclic load."
+                                return@launch
+                            }
+                            consoleMsg = "CYCLIC REBOOT: Initializing nodes for $targetName..."
+                            
+                            // 1. Initializing state update
+                            targetsToUpdate.forEach { item ->
+                                val rebootingState = item.copy(status = "Initializing", metrics = "Rebooting")
+                                database.resourceStateDao().insertState(rebootingState)
+                                FirebaseAuthManager.pushResourceToCloud(rebootingState, scope)
+                            }
+                            
+                            // Delayed simulation
+                            kotlinx.coroutines.delay(1200)
+                            
+                            // 2. Clear state back to active/optimal
+                            targetsToUpdate.forEach { item ->
+                                val optimalState = item.copy(status = "Active", metrics = "Optimal")
+                                database.resourceStateDao().insertState(optimalState)
+                                FirebaseAuthManager.pushResourceToCloud(optimalState, scope)
+                            }
+                            consoleMsg = "SUCCESS: Cyclic restore complete. Cluster $targetName status: ACTIVE."
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .testTag("cloud_restart_button"),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFE65100),
+                        contentColor = Color(0xFFFFE0B2)
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = "Restart targets",
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("RESTART", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Text(
+                text = "COMMON GOOGLE CLOUD TASKS:",
+                style = MaterialTheme.typography.labelSmall,
+                color = SubTextColor,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Restart Instance Task Button (Task Suite)
+                Button(
+                    onClick = {
+                        scope.launch {
+                            val targetsToUpdate = if (selectedTargetId == "ALL") resourcesFound else resourcesFound.filter { it.id == selectedTargetId }
+                            if (targetsToUpdate.isEmpty()) {
+                                consoleMsg = "EXEC ERROR: No active instance selected to issue Reset signal."
+                                return@launch
+                            }
+                            consoleMsg = "GCLOUD: reset command deployed for ${targetsToUpdate.joinToString(", ") { it.name }}..."
+                            targetsToUpdate.forEach { item ->
+                                val resetting = item.copy(status = "Initializing", metrics = "Resetting")
+                                database.resourceStateDao().insertState(resetting)
+                                FirebaseAuthManager.pushResourceToCloud(resetting, scope)
+                            }
+                            kotlinx.coroutines.delay(1000)
+                            targetsToUpdate.forEach { item ->
+                                val active = item.copy(status = "Active", metrics = "Optimal")
+                                database.resourceStateDao().insertState(active)
+                                FirebaseAuthManager.pushResourceToCloud(active, scope)
+                            }
+                            consoleMsg = "GCLOUD: Reset sequence completed successfully for $targetName."
+                        }
+                    },
+                    modifier = Modifier.height(36.dp).testTag("gcp_task_restart_instance"),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0x33E65100),
+                        contentColor = Color(0xFFFFB74D)
+                    ),
+                    border = BorderStroke(1.dp, Color(0x55E65100))
+                ) {
+                    Icon(Icons.Filled.Refresh, contentDescription = "Restart Instance", modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Restart Instance", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+
+                // Clear Cache Task Button
+                Button(
+                    onClick = {
+                        scope.launch {
+                            consoleMsg = "EDGE CACHE: Invalidating CDN url-maps and gateway proxies..."
+                            kotlinx.coroutines.delay(800)
+                            consoleMsg = "SUCCESS: CDN Edge and local memory cache cleared [0.00ms latency]."
+                        }
+                    },
+                    modifier = Modifier.height(36.dp).testTag("gcp_task_clear_cache"),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0x3300E5FF),
+                        contentColor = Color(0xFFE0F7FA)
+                    ),
+                    border = BorderStroke(1.dp, Color(0x5500E5FF))
+                ) {
+                    Icon(Icons.Filled.Delete, contentDescription = "Clear Cache", modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Clear Cache", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+
+                // Flush DNS Task Button
+                Button(
+                    onClick = {
+                        scope.launch {
+                            consoleMsg = "DNS: Refreshing Cloud DNS response policies..."
+                            kotlinx.coroutines.delay(700)
+                            consoleMsg = "SUCCESS: DNS lookup caches flushed globally across 14 PoPs."
+                        }
+                    },
+                    modifier = Modifier.height(36.dp).testTag("gcp_task_flush_dns"),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0x337E57C2),
+                        contentColor = Color(0xFFEDE7F6)
+                    ),
+                    border = BorderStroke(1.dp, Color(0x557E57C2))
+                ) {
+                    Icon(Icons.Filled.Public, contentDescription = "Flush DNS", modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Flush DNS", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+
+                // Rotate Keys Task Button
+                Button(
+                    onClick = {
+                        scope.launch {
+                            consoleMsg = "IAM security: Initiating automated OAuth client & SA credentials rotation..."
+                            kotlinx.coroutines.delay(1000)
+                            consoleMsg = "SUCCESS: Generated brand-new JWT verification key definitions."
+                        }
+                    },
+                    modifier = Modifier.height(36.dp).testTag("gcp_task_rotate_keys"),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0x3300C853),
+                        contentColor = Color(0xFFE8F5E9)
+                    ),
+                    border = BorderStroke(1.dp, Color(0x5500C853))
+                ) {
+                    Icon(Icons.Filled.Settings, contentDescription = "Rotate Keys", modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Rotate Keys", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Micro-terminal feedback board
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF0D0F11), RoundedCornerShape(10.dp))
+                    .border(BorderStroke(1.dp, BorderColor), RoundedCornerShape(10.dp))
+                    .padding(vertical = 10.dp, horizontal = 12.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "> ",
+                        color = AccentColor,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
+                    )
+                    Text(
+                        text = consoleMsg,
+                        color = Color.White,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
 
 @Composable
 fun GeoDistributionChart() {
@@ -1242,3 +1851,493 @@ fun ThreatIntelligenceRadar() {
         }
     }
 }
+
+@Composable
+fun OpenClawAuthDialog(onDismiss: () -> Unit, database: AppDatabase, onUpdateProviders: (List<ProviderData>) -> Unit) {
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var isSignUpMode by remember { mutableStateOf(false) }
+    var operationMsg by remember { mutableStateOf("") }
+    var showLogsTab by remember { mutableStateOf(false) }
+    
+    val scope = rememberCoroutineScope()
+    val currentUser by FirebaseAuthManager.currentUserState.collectAsStateWithLifecycle()
+    val activeEmail by FirebaseAuthManager.simulatedUserEmail.collectAsStateWithLifecycle()
+    val isFallbackMode by FirebaseAuthManager.isFallbackMode.collectAsStateWithLifecycle()
+    val authLogs by FirebaseAuthManager.authLogs.collectAsStateWithLifecycle()
+
+    LaunchedEffect(currentUser) {
+        if (currentUser != null && !isFallbackMode) {
+            FirebaseAuthManager.pullProvidersFromCloud { onUpdateProviders(it) }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = CardColor,
+        titleContentColor = TextColor,
+        textContentColor = TextColor,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Filled.AccountCircle, contentDescription = null, tint = AccentColor, modifier = Modifier.size(28.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (currentUser != null || activeEmail != null) "Unified Secure Console" else "OpenClaw OAuth Connect",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            }
+        },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                if (currentUser == null && activeEmail == null) {
+                    TabRow(
+                        selectedTabIndex = if (isSignUpMode) 1 else 0,
+                        containerColor = BgColor,
+                        contentColor = AccentColor,
+                        modifier = Modifier.clip(RoundedCornerShape(8.dp))
+                    ) {
+                        Tab(
+                            selected = !isSignUpMode,
+                            onClick = { isSignUpMode = false },
+                            text = { Text("Sign In", fontWeight = FontWeight.Bold) }
+                        )
+                        Tab(
+                            selected = isSignUpMode,
+                            onClick = { isSignUpMode = true },
+                            text = { Text("Register", fontWeight = FontWeight.Bold) }
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it },
+                        label = { Text("Email Address") },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentColor, unfocusedBorderColor = BorderColor,
+                            focusedTextColor = TextColor, unfocusedTextColor = TextColor
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text("Security Shield Password") },
+                        modifier = Modifier.fillMaxWidth(),
+                        visualTransformation = PasswordVisualTransformation(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentColor, unfocusedBorderColor = BorderColor,
+                            focusedTextColor = TextColor, unfocusedTextColor = TextColor
+                        )
+                    )
+                    
+                    if (operationMsg.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(operationMsg, color = Color(0xFFFFA726), style = MaterialTheme.typography.bodySmall)
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = {
+                            if (email.isBlank() || password.isBlank()) {
+                                operationMsg = "Please enter valid email and password"
+                                return@Button
+                            }
+                            operationMsg = "Connecting database..."
+                            if (isSignUpMode) {
+                                FirebaseAuthManager.signUpWithEmail(email, password, scope) { success, msg ->
+                                    operationMsg = msg
+                                    if (success) {
+                                        FirebaseAuthManager.pullProvidersFromCloud { onUpdateProviders(it) }
+                                    }
+                                }
+                            } else {
+                                FirebaseAuthManager.signInWithEmail(email, password, scope) { success, msg ->
+                                    operationMsg = msg
+                                    if (success) {
+                                        FirebaseAuthManager.pullProvidersFromCloud { onUpdateProviders(it) }
+                                    }
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentColor, contentColor = Color(0xFF003355)),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(if (isSignUpMode) "SECURE COMMITS" else "AUTHENTICATE GATEWAY", fontWeight = FontWeight.Bold)
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = {
+                            FirebaseAuthManager.signInAnonymously { success, msg ->
+                                operationMsg = msg
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Continue as Sandbox Guest", color = AccentColor, fontWeight = FontWeight.SemiBold)
+                    }
+                } else {
+                    // Logged in mode
+                    Surface(
+                        color = Color(0xFF0D253F),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text("ACTIVE AUTHENTICATION:", style = MaterialTheme.typography.labelSmall, color = AccentColor, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(activeEmail ?: "Guest Session Token", color = TextColor, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = if (isFallbackMode) "Mode: Secured Local Storage Sandbox" else "Mode: Remote Firebase Cloud Connected",
+                                style = MaterialTheme.typography.bodySmall, color = SubTextColor
+                            )
+                        }
+                    }
+                    
+                    if (!isFallbackMode) {
+                        Button(
+                            onClick = {
+                                FirebaseAuthManager.pullResourcesFromCloud(database, scope)
+                                FirebaseAuthManager.pullProvidersFromCloud { onUpdateProviders(it) }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D2235), contentColor = AccentColor),
+                            border = BorderStroke(1.dp, AccentColor),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Filled.Refresh, contentDescription = null, tint = AccentColor)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("FORCE RESYNC PULL FROM CLOUD", fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                    
+                    Button(
+                        onClick = {
+                            FirebaseAuthManager.signOut()
+                            operationMsg = "Logged out successfully"
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B1E1E), contentColor = Color(0xFFFF8585)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("REVOKE SESSION / LOG OUT", fontWeight = FontWeight.Bold)
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Connection Trace Logs:", color = SubTextColor, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    TextButton(onClick = { showLogsTab = !showLogsTab }) {
+                        Text(if (showLogsTab) "Hide Trace" else "Show Trace", color = AccentColor, fontSize = 11.sp)
+                    }
+                }
+                
+                if (showLogsTab) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = BgColor),
+                        border = BorderStroke(1.dp, BorderColor),
+                        modifier = Modifier.fillMaxWidth().height(140.dp).padding(vertical = 4.dp)
+                    ) {
+                        LazyColumn(modifier = Modifier.padding(8.dp).fillMaxSize()) {
+                            items(authLogs) { log ->
+                                Text(
+                                    text = log,
+                                    fontSize = 10.sp,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                    color = if (log.contains("SUCCESS") || log.contains("Authenticated")) Color(0xFF00FF00) else if (log.contains("WARNING") || log.contains("FAILED")) Color(0xFFFFB74D) else TextColor
+                                )
+                            }
+                        }
+                    }
+                    TextButton(onClick = { FirebaseAuthManager.clearLogs() }) {
+                        Text("Clear system trace log", color = Color(0xFFFF5252), fontSize = 10.sp)
+                    }
+                }
+                
+                if (isFallbackMode) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Surface(
+                        color = Color(0xFF2B2B11),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, Color(0xFFFFD54F))
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text("INTEGRATION TROUBLESHOOTING GUIDE:", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFFD54F), fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                "To lock connection to live Firestore databases:\n\n" +
+                                "1. Download Google Services definition configuration bundle (google-services.json) from Firebase Console.\n" +
+                                "2. Store google-services.json directly within the '/app/' directory.\n" +
+                                "3. Confirm SHA-1 keystore settings coincide with Firebase config.\n" +
+                                "4. Re-compile and trigger deep validation. Our engine will dynamically interface and bridge transactions.",
+                                fontSize = 10.sp,
+                                color = TextColor
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close Console", color = AccentColor, fontWeight = FontWeight.Bold)
+            }
+        }
+    )
+}
+
+@Composable
+fun OpenClawGameSharkCheatCodeCenter() {
+    var openclawBeta by remember { mutableStateOf(false) }
+    var debugPayload by remember { mutableStateOf(false) }
+    var cacheTrace by remember { mutableStateOf(false) }
+    var disableDeviceAuth by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = CardColor),
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, BorderColor)
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Icon(
+                    Icons.Filled.Settings,
+                    contentDescription = null,
+                    tint = Color(0xFFFFB74D),
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text = "🕹️ GAMESHARK CHEAT REGISTER",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = TextColor,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Real-time environment & sandbox modifiers",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = SubTextColor
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            CheatToggleRow(
+                title = "OPENCLAW_BETA",
+                description = "Enable advanced unreleased model structures",
+                checked = openclawBeta,
+                onCheckedChange = {
+                    openclawBeta = it
+                    Kernel.appendEvent(
+                        DomainEvent(
+                            type = "CHEATS_STATE_MUTATED",
+                            domainId = "SystemScan",
+                            payload = mapOf("variable" to "OPENCLAW_BETA", "status" to if (it) "Enabled" else "Disabled")
+                        )
+                    )
+                }
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            CheatToggleRow(
+                title = "DEBUG_MODEL_PAYLOAD",
+                description = "Dump all raw request JSON to standard logs",
+                checked = debugPayload,
+                onCheckedChange = {
+                    debugPayload = it
+                    Kernel.appendEvent(
+                        DomainEvent(
+                            type = "CHEATS_STATE_MUTATED",
+                            domainId = "SystemScan",
+                            payload = mapOf("variable" to "OPENCLAW_DEBUG_MODEL_PAYLOAD", "status" to if (it) "Enabled" else "Disabled")
+                        )
+                    )
+                }
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            CheatToggleRow(
+                title = "OPENCLAW_CACHE_TRACE",
+                description = "Analyze prompt cache hits / misses in real-time",
+                checked = cacheTrace,
+                onCheckedChange = {
+                    cacheTrace = it
+                    Kernel.appendEvent(
+                        DomainEvent(
+                            type = "CHEATS_STATE_MUTATED",
+                            domainId = "SystemScan",
+                            payload = mapOf("variable" to "OPENCLAW_CACHE_TRACE", "status" to if (it) "Enabled" else "Disabled")
+                        )
+                    )
+                }
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            CheatToggleRow(
+                title = "DEVICE_AUTH_DISABLE",
+                description = "Bypass hardware certificate gates",
+                checked = disableDeviceAuth,
+                onCheckedChange = {
+                    disableDeviceAuth = it
+                    Kernel.appendEvent(
+                        DomainEvent(
+                            type = "CHEATS_STATE_MUTATED",
+                            domainId = "SystemScan",
+                            payload = mapOf("variable" to "DEVICE_AUTH_DISABLE", "status" to if (it) "Enabled" else "Disabled")
+                        )
+                    )
+                }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider(color = BorderColor)
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                text = "CODER CHEAT-SHEET HOTKEYS:",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFFFFB74D),
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = {
+                        Kernel.appendEvent(
+                            DomainEvent(
+                                type = "CHEATS_SYSTEM_EVENT_INJECT",
+                                domainId = "SystemScan",
+                                payload = mapOf("command" to "openclaw system event", "source" to "AndroidConsole")
+                            )
+                        )
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E230D), contentColor = Color(0xFFFFD54F)),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                ) {
+                    Text("⚙️ Inject Event", fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                }
+
+                Button(
+                    onClick = {
+                        Kernel.appendEvent(
+                            DomainEvent(
+                                type = "RUBIKS_NAV_CLICK",
+                                domainId = "UserInterface",
+                                payload = mapOf("target" to "CommitmentsListAll")
+                            )
+                        )
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E230D), contentColor = Color(0xFFFFD54F)),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                ) {
+                    Text("📋 Commitments", fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = {
+                        Kernel.appendEvent(
+                            DomainEvent(
+                                type = "MISSION_STEP",
+                                domainId = "MissionControl",
+                                payload = mapOf("step" to "CLI: openclaw tasks flow checked")
+                            )
+                        )
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E230D), contentColor = Color(0xFFFFD54F)),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                ) {
+                    Text("🔄 Flow Pipelines", fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                }
+
+                Button(
+                    onClick = {
+                        Kernel.appendEvent(
+                            DomainEvent(
+                                type = "DIAGNOSTIC_START",
+                                domainId = "SystemScan",
+                                payload = mapOf("target" to "GoogleMetadata")
+                            )
+                        )
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F262B), contentColor = Color(0xFF00E5FF)),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                ) {
+                    Text("🔑 SA Metadata Token", fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CheatToggleRow(
+    title: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF0D0F11), RoundedCornerShape(12.dp))
+            .border(BorderStroke(1.dp, BorderColor), RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                title,
+                fontSize = 12.sp,
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                color = AccentColor,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                description,
+                fontSize = 10.sp,
+                color = SubTextColor
+            )
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color(0xFF003355),
+                checkedTrackColor = Color(0xFFFFB74D),
+                uncheckedThumbColor = SubTextColor,
+                uncheckedTrackColor = Color(0xFF1E2125)
+            )
+        )
+    }
+}
+

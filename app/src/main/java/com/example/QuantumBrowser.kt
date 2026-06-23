@@ -1,5 +1,6 @@
 package com.example
 
+import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -35,14 +36,45 @@ import org.json.JSONObject
 
 data class BrowserTab(val id: Int, var url: String, var title: String)
 
+class WebAppInterface(private val scope: kotlinx.coroutines.CoroutineScope) {
+    @JavascriptInterface
+    fun postMessage(eventJson: String) {
+        try {
+            val json = org.json.JSONObject(eventJson)
+            val type = json.getString("type")
+            val domainId = json.getString("domainId")
+            val payloadObj = json.optJSONObject("payload")
+            val payloadMap = mutableMapOf<String, Any>()
+            if (payloadObj != null) {
+                val keys = payloadObj.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    payloadMap[key] = payloadObj.get(key)
+                }
+            }
+            scope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                com.example.Kernel.appendEvent(
+                    com.example.DomainEvent(
+                        type = type,
+                        domainId = domainId,
+                        payload = payloadMap
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuantumBrowserDialog(database: AppDatabase, onClose: () -> Unit) {
-    var tabs by remember { mutableStateOf(listOf(BrowserTab(0, "https://google.com", "New Tab"))) }
+    var tabs by remember { mutableStateOf(listOf(BrowserTab(0, "file:///android_asset/evez-tamagotchi-builder.html", "EVEZART Gold Multiplex"))) }
     var currentTabId by remember { mutableIntStateOf(0) }
     var tabCounter by remember { mutableIntStateOf(1) }
 
-    var inputUrl by remember { mutableStateOf("https://google.com") }
+    var inputUrl by remember { mutableStateOf("file:///android_asset/evez-tamagotchi-builder.html") }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var progress by remember { mutableFloatStateOf(0f) }
     var pageContent by remember { mutableStateOf("") }
@@ -62,6 +94,32 @@ fun QuantumBrowserDialog(database: AppDatabase, onClose: () -> Unit) {
 
     val scope = rememberCoroutineScope()
     val savedSessions by database.browserSessionDao().getAllSessions().collectAsStateWithLifecycle(initialValue = emptyList())
+
+    LaunchedEffect(webViewRef) {
+        webViewRef?.let { webView ->
+            com.example.Kernel.eventLog.collect { list ->
+                val lastEvent = list.lastOrNull() ?: return@collect
+                val payloadObj = org.json.JSONObject()
+                lastEvent.payload?.forEach { (k, v) ->
+                    payloadObj.put(k, v)
+                }
+                val jsEvent = org.json.JSONObject().apply {
+                    put("type", lastEvent.type)
+                    put("domainId", lastEvent.domainId)
+                    put("payload", payloadObj)
+                    put("timestamp", lastEvent.timestamp)
+                    put("sequenceNumber", lastEvent.sequenceNumber)
+                    put("_fromAndroid", true)
+                }
+                webView.post {
+                    webView.evaluateJavascript(
+                        "if (window.kernel) { window.kernel.appendEvent($jsEvent); }",
+                        null
+                    )
+                }
+            }
+        }
+    }
 
     fun loadTab(tab: BrowserTab) {
         currentTabId = tab.id
@@ -183,6 +241,14 @@ fun QuantumBrowserDialog(database: AppDatabase, onClose: () -> Unit) {
                 Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
                     AndroidView(
                         factory = { context ->
+                            try {
+                                val jsCacheDir = java.io.File(context.cacheDir, "WebView/Default/HTTP Cache/Code Cache/js")
+                                val wasmCacheDir = java.io.File(context.cacheDir, "WebView/Default/HTTP Cache/Code Cache/wasm")
+                                if (!jsCacheDir.exists()) jsCacheDir.mkdirs()
+                                if (!wasmCacheDir.exists()) wasmCacheDir.mkdirs()
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
                             WebView(context).apply {
                                 settings.javaScriptEnabled = true
                                 settings.domStorageEnabled = true
@@ -192,6 +258,9 @@ fun QuantumBrowserDialog(database: AppDatabase, onClose: () -> Unit) {
                                 settings.builtInZoomControls = true
                                 settings.displayZoomControls = false
                                 settings.mediaPlaybackRequiresUserGesture = false
+                                settings.allowFileAccess = true
+                                settings.allowContentAccess = true
+                                addJavascriptInterface(WebAppInterface(scope), "AndroidKernelBridge")
 
                                 webViewClient = object : WebViewClient() {
                                     override fun shouldInterceptRequest(view: WebView?, request: android.webkit.WebResourceRequest?): android.webkit.WebResourceResponse? {
