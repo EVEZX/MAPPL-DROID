@@ -91,9 +91,9 @@ fun ContextReasoningOverlay() {
             }
         } else {
             Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E2E).copy(alpha = 0.95f)),
+                colors = CardDefaults.cardColors(containerColor = com.example.CardColor.copy(alpha = 0.95f)),
                 shape = RoundedCornerShape(16.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFAA00FF).copy(alpha = 0.5f)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, com.example.BorderColor),
                 elevation = CardDefaults.cardElevation(8.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -105,7 +105,7 @@ fun ContextReasoningOverlay() {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = Color(0xFF00FFCC))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("AutoSuggest & Reasoning", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("AutoSuggest & Reasoning", color = com.example.TextColor, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         }
                         IconButton(onClick = { isExpanded = false }, modifier = Modifier.size(24.dp)) {
                             Icon(Icons.Filled.Close, contentDescription = "Close", tint = Color.Gray)

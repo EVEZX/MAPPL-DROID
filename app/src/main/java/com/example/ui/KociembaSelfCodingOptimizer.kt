@@ -71,9 +71,9 @@ fun KociembaSelfCodingOptimizer() {
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF0A0F1A)),
+        colors = CardDefaults.cardColors(containerColor = com.example.CardColor),
         shape = RoundedCornerShape(24.dp),
-        border = BorderStroke(1.dp, Color(0xFF00FFCC))
+        border = BorderStroke(1.dp, com.example.BorderColor)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(
@@ -90,7 +90,7 @@ fun KociembaSelfCodingOptimizer() {
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "SELF-CODING KOCIEMBA STATE OPTIMIZER",
-                        color = Color.White,
+                        color = com.example.TextColor,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp
                     )

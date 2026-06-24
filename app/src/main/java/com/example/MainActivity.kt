@@ -41,6 +41,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.ui.theme.MyApplicationTheme
 import com.example.BuildConfig
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioTrack
+import androidx.compose.animation.core.*
+import kotlinx.coroutines.isActive
+import android.media.AudioTrack
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -59,6 +65,8 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -103,7 +111,7 @@ class MainActivity : ComponentActivity() {
     
     enableEdgeToEdge()
     setContent {
-      MyApplicationTheme {
+      MyApplicationTheme(darkTheme = isDarkMode, dynamicColor = false) {
         Box(modifier = Modifier.fillMaxSize()) {
             OpenClawDashboard()
             com.example.ui.ContextReasoningOverlay()
@@ -113,12 +121,153 @@ class MainActivity : ComponentActivity() {
   }
 }
 
-val BgColor = Color(0xFF0B0D0F)
-val CardColor = Color(0xFF1A1C1E)
-val TextColor = Color(0xFFE2E2E6)
-val BorderColor = Color(0xFF2D3135)
-val AccentColor = Color(0xFFD1E4FF)
-val SubTextColor = Color(0xFF8E9196)
+var isDarkMode by mutableStateOf(true)
+var isAutopilotActive by mutableStateOf(false)
+var globalAudioPulse by mutableStateOf(0.1f)
+var isRetroMusicEnabled by mutableStateOf(false)
+
+fun startRetroChiptuneEngine(
+    scope: kotlinx.coroutines.CoroutineScope,
+    onPeak: (Float) -> Unit
+): (() -> Unit) {
+    var isRunning = true
+    val sampleRate = 11025
+    val minBufferSize = try {
+        AudioTrack.getMinBufferSize(
+            sampleRate,
+            AudioFormat.CHANNEL_OUT_MONO,
+            AudioFormat.ENCODING_PCM_16BIT
+        )
+    } catch (e: Exception) {
+        512
+    }
+    
+    val audioTrack = try {
+        AudioTrack.Builder()
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build()
+            )
+            .setAudioFormat(
+                AudioFormat.Builder()
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setSampleRate(sampleRate)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build()
+            )
+            .setBufferSizeInBytes(if (minBufferSize > 0) minBufferSize else 1024)
+            .setTransferMode(AudioTrack.MODE_STREAM)
+            .build()
+    } catch (e: Exception) {
+        null
+    }
+
+    if (audioTrack != null) {
+        try {
+            audioTrack.play()
+        } catch (e: Exception) {
+            // Let fallback handle it if play fails
+        }
+        scope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            val notes = listOf(
+                261.63f, 293.66f, 329.63f, 349.23f, 392.00f, 440.00f, 493.88f, 523.25f, // Major
+                196.00f, 220.00f, 246.94f, 261.63f, 293.66f, 329.63f, 392.00f, 440.00f  // OSINT Arpeggio
+            )
+            val chordProgressions = listOf(
+                listOf(261.63f, 329.63f, 392.00f), // C Major
+                listOf(220.00f, 261.63f, 329.63f), // A Minor (Mysterious)
+                listOf(349.23f, 440.00f, 523.25f), // F Major
+                listOf(196.00f, 246.94f, 293.66f)  // G Major
+            )
+            var noteIndex = 0
+            val noteDurationSamples = sampleRate / 6 // 6 notes per second
+            val buffer = ShortArray(noteDurationSamples)
+
+            while (isRunning && kotlinx.coroutines.isActive) {
+                val noteFreq = notes[noteIndex % notes.size]
+                val chord = chordProgressions[(noteIndex / 4) % chordProgressions.size]
+                
+                var maxVal = 0f
+                for (i in 0 until noteDurationSamples) {
+                    val t = i.toDouble() / sampleRate
+                    
+                    // Melody oscillator (Square wave for retro feel!)
+                    val melodySample = if (kotlin.math.sin(2.0 * Math.PI * noteFreq * t) > 0) 0.15 else -0.15
+                    
+                    // Chords oscillators (Triangle/Sine wave for backing)
+                    var chordSample = 0.0
+                    chord.forEach { freq ->
+                        chordSample += kotlin.math.sin(2.0 * Math.PI * freq * t) * 0.08
+                    }
+                    
+                    // Add noise or telemetry beep boops to give retro cockpit feel
+                    val telemetrySample = if (noteIndex % 3 == 0 && i < noteDurationSamples / 4) {
+                        kotlin.math.sin(2.0 * Math.PI * 1500.0 * t) * 0.1
+                    } else 0.0
+                    
+                    val combined = melodySample + chordSample + telemetrySample
+                    val pcmValue = (combined * 32767.0).coerceIn(-32767.0, 32767.0).toInt().toShort()
+                    buffer[i] = pcmValue
+                    
+                    val absVal = Math.abs(pcmValue.toFloat()) / 32767f
+                    if (absVal > maxVal) {
+                        maxVal = absVal
+                    }
+                }
+                
+                try {
+                    audioTrack.write(buffer, 0, noteDurationSamples)
+                } catch (e: Exception) {
+                    // ignore write failures
+                }
+                
+                onPeak(maxVal)
+                
+                noteIndex++
+                kotlinx.coroutines.yield()
+            }
+            try {
+                audioTrack.stop()
+                audioTrack.release()
+            } catch (e: Exception) {}
+        }
+    } else {
+        // Fallback procedural animation generator if audio track is not supported
+        scope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            var t = 0f
+            while (isRunning && kotlinx.coroutines.isActive) {
+                val value = 0.3f + 0.5f * kotlin.math.sin(t).coerceIn(-1f, 1f)
+                onPeak(value)
+                t += 0.2f
+                kotlinx.coroutines.delay(100)
+            }
+        }
+    }
+
+    return {
+        isRunning = false
+    }
+}
+
+val BgColor: Color
+  @Composable get() = if (isDarkMode) Color(0xFF0B0D0F) else Color(0xFFF3F4F6)
+
+val CardColor: Color
+  @Composable get() = if (isDarkMode) Color(0xFF1A1C1E) else Color(0xFFFFFFFF)
+
+val TextColor: Color
+  @Composable get() = if (isDarkMode) Color(0xFFE2E2E6) else Color(0xFF111827)
+
+val BorderColor: Color
+  @Composable get() = if (isDarkMode) Color(0xFF2D3135) else Color(0xFFE5E7EB)
+
+val AccentColor: Color
+  @Composable get() = if (isDarkMode) Color(0xFFD1E4FF) else Color(0xFF2563EB)
+
+val SubTextColor: Color
+  @Composable get() = if (isDarkMode) Color(0xFF8E9196) else Color(0xFF4B5563)
 
 @Composable
 fun OpenClawDashboard() {
@@ -151,6 +300,57 @@ fun OpenClawDashboard() {
   var newProviderEndpoint by remember { mutableStateOf("") }
   var latencyData by remember { mutableStateOf(listOf(120f, 135f, 110f, 180f, 95f, 150f, 115f)) }
   var tokenData by remember { mutableStateOf(listOf(40f, 60f, 30f, 90f, 50f, 85f, 75f)) }
+
+  // Retro Music Engine Activator
+  DisposableEffect(isRetroMusicEnabled) {
+      var stopEngine: (() -> Unit)? = null
+      if (isRetroMusicEnabled) {
+          stopEngine = startRetroChiptuneEngine(scope) { peak ->
+              globalAudioPulse = peak
+          }
+      }
+      onDispose {
+          stopEngine?.invoke()
+      }
+  }
+
+  // Auto-activate Music when Autopilot is toggled
+  LaunchedEffect(isAutopilotActive) {
+      if (isAutopilotActive) {
+          isRetroMusicEnabled = true
+      }
+  }
+
+  // Autopilot Agent Simulation Spine
+  var autopilotPhase by remember { mutableStateOf(1) }
+  LaunchedEffect(isAutopilotActive) {
+      if (isAutopilotActive) {
+          var step = 1
+          while (true) {
+              autopilotPhase = step
+              val logMsg = when (step) {
+                  1 -> "[PHASE 1: INSTANCE ENUMERATION] Scanned 6 tabs (Quantum | Finance | Intel). Mapped interdependencies."
+                  2 -> "[PHASE 2: PARALLEL EXTRACTION] Extracted Bell state parameters. Analyzed Solscan wallet address anomalies."
+                  3 -> "[PHASE 3: CROSS-DOMAIN SYNTHESIS] Matrix complete: quantum circuit ID correlated with gov AARO reports."
+                  4 -> "[PHASE 4: SIMULTANEOUS ACTION] Generated Bell State entanglement circuit. Tested decoherence time."
+                  5 -> "[PHASE 5: SAFETY & VERIFICATION] Checked sandbox constraints. Logged universal trace to spine."
+                  6 -> "[PHASE 6: RECURSIVE IMPROVEMENT] Formulated PROMPT-Ω-V2. Saved pattern state to Memory DB."
+                  else -> "[AUTOPILOT RUNNING] Continuing circuitronicyclical geometrigami alignment..."
+              }
+              systemAlerts = systemAlerts + logMsg
+              Kernel.appendEvent(
+                  DomainEvent(
+                      type = "AUTOPILOT_PHASE_UPDATE",
+                      domainId = "SystemScan",
+                      payload = mapOf("phase" to step, "log" to logMsg)
+                  )
+              )
+              
+              step = if (step >= 6) 1 else step + 1
+              kotlinx.coroutines.delay(4000)
+          }
+      }
+  }
 
   LaunchedEffect(Unit) {
       while(true) {
@@ -188,6 +388,112 @@ fun OpenClawDashboard() {
   Scaffold(
       modifier = Modifier.fillMaxSize(), 
       containerColor = BgColor,
+      topBar = {
+          Surface(
+              modifier = Modifier.fillMaxWidth().statusBarsPadding(),
+              color = CardColor,
+              border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+              tonalElevation = 8.dp
+          ) {
+              Row(
+                  modifier = Modifier
+                      .fillMaxWidth()
+                      .padding(horizontal = 16.dp, vertical = 12.dp),
+                  horizontalArrangement = Arrangement.SpaceBetween,
+                  verticalAlignment = Alignment.CenterVertically
+              ) {
+                  Row(verticalAlignment = Alignment.CenterVertically) {
+                      Box(
+                          modifier = Modifier
+                              .size(12.dp)
+                              .background(
+                                  if (isAutopilotActive) {
+                                      Color(0xFF00FFCC).copy(alpha = 0.5f + globalAudioPulse * 0.5f)
+                                  } else {
+                                      Color(0xFFFF5252)
+                                  },
+                                  shape = RoundedCornerShape(6.dp)
+                              )
+                      )
+                      Spacer(modifier = Modifier.width(8.dp))
+                      Column {
+                          Text(
+                              text = "EVEZ // PROMPT-Ω",
+                              style = MaterialTheme.typography.titleSmall,
+                              fontWeight = FontWeight.Bold,
+                              color = TextColor,
+                              fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                          )
+                          Text(
+                              text = if (isAutopilotActive) "SPINE COGNITION: AGENT AUTOPILOT ON" else "SPINE COGNITION: MANUAL CONTROLS",
+                              style = MaterialTheme.typography.labelSmall,
+                              color = if (isAutopilotActive) Color(0xFF00FFCC) else SubTextColor,
+                              fontSize = 8.sp,
+                              fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                          )
+                      }
+                  }
+
+                  Row(
+                      modifier = Modifier.height(24.dp),
+                      horizontalArrangement = Arrangement.spacedBy(2.dp),
+                      verticalAlignment = Alignment.Bottom
+                  ) {
+                      for (i in 0 until 5) {
+                          val barHeight = if (isAutopilotActive) {
+                              (10 + (i * 3) + (globalAudioPulse * 12).toInt()).coerceIn(10, 24).dp
+                          } else {
+                              (6 + (i * 3)).dp
+                          }
+                          Box(
+                              modifier = Modifier
+                                  .width(3.dp)
+                                  .height(barHeight)
+                                  .background(
+                                      if (isAutopilotActive) {
+                                          Color(0xFF8E24AA).copy(alpha = 0.7f + globalAudioPulse * 0.3f)
+                                      } else {
+                                          AccentColor
+                                      },
+                                      shape = RoundedCornerShape(1.dp)
+                                  )
+                          )
+                      }
+                  }
+
+                  Row(verticalAlignment = Alignment.CenterVertically) {
+                      Text(
+                          text = "AUTOPILOT",
+                          style = MaterialTheme.typography.labelSmall,
+                          color = if (isAutopilotActive) Color(0xFF00FFCC) else SubTextColor,
+                          fontWeight = FontWeight.Bold,
+                          fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                          modifier = Modifier.padding(end = 8.dp)
+                      )
+                      Switch(
+                          checked = isAutopilotActive,
+                          onCheckedChange = { active ->
+                              isAutopilotActive = active
+                              Kernel.appendEvent(
+                                  DomainEvent(
+                                      type = "AUTOPILOT_TOGGLE",
+                                      domainId = "SystemScan",
+                                      payload = mapOf("active" to active)
+                                      )
+                                  )
+                              },
+                          colors = SwitchDefaults.colors(
+                              checkedThumbColor = Color(0xFF00FFCC),
+                              checkedTrackColor = Color(0xFF083C3C),
+                              uncheckedThumbColor = Color.Gray,
+                              uncheckedTrackColor = Color.DarkGray
+                          ),
+                          modifier = Modifier.testTag("autopilot_switch")
+                      )
+                  }
+              }
+          }
+      },
       floatingActionButton = {
           Column(horizontalAlignment = Alignment.End) {
               if (isFabMenuOpen) {
@@ -328,8 +634,314 @@ fun OpenClawDashboard() {
           when (index % 13) {
               0 -> Column(modifier = mod) {
                   Spacer(modifier = Modifier.height(16.dp))
-                  Text(text = "God AI Task Execution Deluxe Ultra Extra", style = MaterialTheme.typography.headlineLarge, color = Color.White)
-                  Text(text = "v1.0-KILOCLAW-FULL • EVEZ-OS ACTIVE", style = MaterialTheme.typography.bodySmall, color = AccentColor)
+                  
+                  // Title Area with retro theme toggle
+                  Row(
+                      modifier = Modifier.fillMaxWidth(),
+                      horizontalArrangement = Arrangement.SpaceBetween,
+                      verticalAlignment = Alignment.CenterVertically
+                  ) {
+                      Column(modifier = Modifier.weight(1f)) {
+                          Text(
+                              text = "EVEZ COGNITIVE COCKPIT",
+                              style = MaterialTheme.typography.headlineSmall,
+                              color = TextColor,
+                              fontWeight = FontWeight.Bold,
+                              fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                          )
+                          Text(
+                              text = "N64 • GAMECUBE • PLAYSTATION SCI-FI OSINT INTERFACE",
+                              style = MaterialTheme.typography.labelSmall,
+                              color = AccentColor,
+                              fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                          )
+                      }
+                      IconButton(
+                          onClick = { 
+                              isDarkMode = !isDarkMode 
+                              Kernel.appendEvent(
+                                  DomainEvent(
+                                      type = "THEME_TOGGLE",
+                                      domainId = "UserInterface",
+                                      payload = mapOf("darkMode" to isDarkMode)
+                                  )
+                              )
+                          },
+                          modifier = Modifier
+                              .size(44.dp)
+                              .background(CardColor, RoundedCornerShape(12.dp))
+                              .border(1.dp, BorderColor, RoundedCornerShape(12.dp))
+                              .testTag("theme_toggle_btn")
+                      ) {
+                          Icon(
+                              imageVector = if (isDarkMode) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+                              contentDescription = "Toggle Theme Mode",
+                              tint = AccentColor
+                          )
+                      }
+                  }
+
+                  Spacer(modifier = Modifier.height(12.dp))
+
+                  // RETRO MEMORY CARD AND SYSTEM STATUS (PSX/N64 Vibes!)
+                  Card(
+                      modifier = Modifier.fillMaxWidth(),
+                      colors = CardDefaults.cardColors(containerColor = CardColor),
+                      shape = RoundedCornerShape(16.dp),
+                      border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
+                  ) {
+                      Column(modifier = Modifier.padding(16.dp)) {
+                          Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                              Text("SYSTEM DIAGNOSTICS [AARO-NHI-v1]", color = Color(0xFF00FFCC), fontSize = 10.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                              Text("PORT: 19001", color = SubTextColor, fontSize = 10.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                          }
+                          Spacer(modifier = Modifier.height(8.dp))
+                          Text("• MEM-CARD 1: OK [64 BLOCKS FREE - FORENSIC SAVE ON]", color = TextColor, fontSize = 11.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                          Text("• MEM-CARD 2: OK [SPINE CONVERGENCE MANIFOLD CONNECTED]", color = TextColor, fontSize = 11.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                          Text("• ENGINE CLOCK: 433 MHz (R4300i MIPs Analog)", color = TextColor, fontSize = 11.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                          Text("• GROUNDING SCANNERS: GOOGLE SEARCH & MAPS Grounded", color = TextColor, fontSize = 11.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                      }
+                  }
+
+                  Spacer(modifier = Modifier.height(12.dp))
+
+                  // SPINNING ALIEN UFO/SAUCER & PLANETARY RING RETRO RENDERING
+                  Card(
+                      modifier = Modifier.fillMaxWidth(),
+                      colors = CardDefaults.cardColors(containerColor = Color.Black),
+                      shape = RoundedCornerShape(16.dp),
+                      border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
+                  ) {
+                      val rotationAngle = rememberInfiniteTransition().animateFloat(
+                          initialValue = 0f,
+                          targetValue = 360f,
+                          animationSpec = infiniteRepeatable(tween(6000, easing = LinearEasing)),
+                          label = "ufo_spin"
+                      )
+                      val ringBounce = rememberInfiniteTransition().animateFloat(
+                          initialValue = -10f,
+                          targetValue = 10f,
+                          animationSpec = infiniteRepeatable(tween(2500, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
+                          label = "ring_bounce"
+                      )
+
+                      Box(
+                          modifier = Modifier
+                              .fillMaxWidth()
+                              .height(180.dp),
+                          contentAlignment = Alignment.Center
+                      ) {
+                          Canvas(modifier = Modifier.fillMaxSize()) {
+                              val cx = size.width / 2f
+                              val cy = size.height / 2f
+                              val ufoWidth = 100.dp.toPx() + (globalAudioPulse * 40.dp.toPx())
+                              val ufoHeight = 35.dp.toPx() + (globalAudioPulse * 15.dp.toPx())
+
+                              // Draw Retro Starfield Background
+                              for (i in 0 until 15) {
+                                  val sx = (cx * (1f + kotlin.math.sin(i.toDouble()).toFloat() * 0.9f))
+                                  val sy = (cy * (1f + kotlin.math.cos((i * 2).toDouble()).toFloat() * 0.9f))
+                                  drawCircle(
+                                      color = Color.White.copy(alpha = 0.3f + globalAudioPulse * 0.7f),
+                                      radius = 2.dp.toPx(),
+                                      center = Offset(sx, sy)
+                                  )
+                              }
+
+                              // Draw Planetary / Orbit Rings (Retro Isometric Wireframe)
+                              drawOval(
+                                  color = Color(0xFF8E24AA).copy(alpha = 0.6f),
+                                  topLeft = Offset(cx - ufoWidth * 1.3f, cy - ufoHeight * 1.5f + ringBounce.value),
+                                  size = Size(ufoWidth * 2.6f, ufoHeight * 3f),
+                                  style = Stroke(width = 2.dp.toPx(), pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(15f, 15f), 0f))
+                              )
+
+                              // Draw Spinning UFO Alien Craft (N64 Low-Poly style)
+                              // Dome
+                              drawPath(
+                                  path = Path().apply {
+                                      moveTo(cx - ufoWidth * 0.3f, cy)
+                                      cubicTo(
+                                          cx - ufoWidth * 0.2f, cy - ufoHeight * 1.3f,
+                                          cx + ufoWidth * 0.2f, cy - ufoHeight * 1.3f,
+                                          cx + ufoWidth * 0.3f, cy
+                                      )
+                                      close()
+                                  },
+                                  color = Color(0xFF00FFCC).copy(alpha = 0.7f),
+                                  style = Stroke(width = 3.dp.toPx())
+                              )
+
+                              // Saucer Body
+                              drawOval(
+                                  color = Color(0xFF00C8FF),
+                                  topLeft = Offset(cx - ufoWidth / 2f, cy - ufoHeight / 2f),
+                                  size = Size(ufoWidth, ufoHeight),
+                                  style = Stroke(width = 4.dp.toPx())
+                              )
+
+                              // Inner Low-poly details (spinning lines)
+                              val rad = rotationAngle.value * Math.PI / 180f
+                              val lineXOffset = (ufoWidth / 2f) * kotlin.math.cos(rad).toFloat()
+                              drawLine(
+                                  color = Color.White.copy(alpha = 0.8f),
+                                  start = Offset(cx - lineXOffset, cy),
+                                  end = Offset(cx + lineXOffset, cy),
+                                  strokeWidth = 3.dp.toPx()
+                              )
+
+                              // Propulsion Beam (pulsing to audio rhythm!)
+                              val beamHeight = 40.dp.toPx() + (globalAudioPulse * 60.dp.toPx())
+                              drawPath(
+                                  path = Path().apply {
+                                      moveTo(cx - ufoWidth * 0.15f, cy + ufoHeight * 0.4f)
+                                      lineTo(cx + ufoWidth * 0.15f, cy + ufoHeight * 0.4f)
+                                      lineTo(cx + ufoWidth * 0.3f, cy + ufoHeight * 0.4f + beamHeight)
+                                      lineTo(cx - ufoWidth * 0.3f, cy + ufoHeight * 0.4f + beamHeight)
+                                      close()
+                                  },
+                                  color = Color(0xFF00FFCC).copy(alpha = 0.15f + globalAudioPulse * 0.35f)
+                              )
+                          }
+
+                          // Retro Console Overlay Texts
+                          Column(
+                              modifier = Modifier
+                                  .fillMaxSize()
+                                  .padding(12.dp),
+                              verticalArrangement = Arrangement.SpaceBetween
+                          ) {
+                              Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                  Text("CRT SCAN_MODE: 240p", color = Color(0xFFFF5252).copy(alpha = 0.8f), fontSize = 9.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                                  Text("LOCK: AARO/A-16", color = Color(0xFF00FFCC), fontSize = 9.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                              }
+                              Text(
+                                  text = "ALIEN TELEMETRY VECTOR STREAM",
+                                  modifier = Modifier.align(Alignment.CenterHorizontally),
+                                  color = Color.White.copy(alpha = 0.5f),
+                                  fontSize = 8.sp,
+                                  fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                              )
+                          }
+                      }
+                  }
+
+                  Spacer(modifier = Modifier.height(12.dp))
+
+                  // RETRO AUDIO & MUSIC CONTROLLER PANEL
+                  Card(
+                      modifier = Modifier.fillMaxWidth(),
+                      colors = CardDefaults.cardColors(containerColor = CardColor),
+                      shape = RoundedCornerShape(16.dp),
+                      border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
+                  ) {
+                      Column(modifier = Modifier.padding(16.dp)) {
+                          Row(
+                              modifier = Modifier.fillMaxWidth(),
+                              horizontalArrangement = Arrangement.SpaceBetween,
+                              verticalAlignment = Alignment.CenterVertically
+                          ) {
+                              Row(verticalAlignment = Alignment.CenterVertically) {
+                                  Icon(Icons.Filled.MonitorHeart, contentDescription = null, tint = Color(0xFF8E24AA), modifier = Modifier.size(20.dp))
+                                  Spacer(modifier = Modifier.width(8.dp))
+                                  Text(
+                                      text = "FM CHIPTUNE SYNTH MUSIC ENGINE",
+                                      color = TextColor,
+                                      fontWeight = FontWeight.Bold,
+                                      fontSize = 12.sp,
+                                      fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                  )
+                              }
+                              Switch(
+                                  checked = isRetroMusicEnabled,
+                                  onCheckedChange = { isRetroMusicEnabled = it },
+                                  colors = SwitchDefaults.colors(
+                                      checkedThumbColor = Color(0xFF8E24AA),
+                                      checkedTrackColor = Color(0xFF3B0F3F)
+                                  ),
+                                  modifier = Modifier.testTag("retro_music_switch")
+                              )
+                          }
+                          Spacer(modifier = Modifier.height(8.dp))
+                          Text(
+                              text = if (isRetroMusicEnabled) "PLAYING: COGNITIVE SPACE ARPEGGIATOR [CD-QUALITY 11kHz MONO]" else "STANDBY: COGNITIVE ARPEGGIATOR STOPPED",
+                              color = if (isRetroMusicEnabled) Color(0xFF00FFCC) else SubTextColor,
+                              fontSize = 10.sp,
+                              fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                          )
+                          Spacer(modifier = Modifier.height(12.dp))
+                          
+                          // Dynamic Color Transition / Pulse Bar
+                          Row(
+                              modifier = Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(6.dp)).background(Color.Black),
+                              verticalAlignment = Alignment.CenterVertically
+                          ) {
+                              Box(
+                                  modifier = Modifier
+                                      .fillMaxHeight()
+                                      .fillMaxWidth(globalAudioPulse)
+                                      .background(
+                                          androidx.compose.ui.graphics.Brush.horizontalGradient(
+                                              listOf(Color(0xFF8E24AA), Color(0xFF00FFCC), Color(0xFF00C8FF))
+                                          )
+                                      )
+                              )
+                          }
+                      }
+                  }
+
+                  Spacer(modifier = Modifier.height(12.dp))
+
+                  // AUTOPILOT SPINE TRUNK MANIFOLD (PHASE TRAIL)
+                  if (isAutopilotActive) {
+                      Card(
+                          modifier = Modifier.fillMaxWidth(),
+                          colors = CardDefaults.cardColors(containerColor = CardColor),
+                          shape = RoundedCornerShape(16.dp),
+                          border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF00FFCC))
+                      ) {
+                          Column(modifier = Modifier.padding(16.dp)) {
+                              Text(
+                                  text = "SPINE RECURSIVE AUTOPILOT MANIFOLD",
+                                  color = Color(0xFF00FFCC),
+                                  fontWeight = FontWeight.Bold,
+                                  fontSize = 12.sp,
+                                  fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                              )
+                              Spacer(modifier = Modifier.height(8.dp))
+                              
+                              Row(
+                                  modifier = Modifier.fillMaxWidth(),
+                                  horizontalArrangement = Arrangement.SpaceBetween
+                              ) {
+                                  for (ph in 1..6) {
+                                      val isCurrent = autopilotPhase == ph
+                                      val ledColor = if (isCurrent) Color(0xFF00FFCC) else Color(0xFF1E2A2B)
+                                      val textColor = if (isCurrent) Color.White else SubTextColor
+                                      Column(
+                                          horizontalAlignment = Alignment.CenterHorizontally,
+                                          modifier = Modifier.weight(1f)
+                                      ) {
+                                          Box(
+                                              modifier = Modifier
+                                                  .size(16.dp)
+                                                  .background(ledColor, RoundedCornerShape(8.dp))
+                                                  .border(1.dp, if (isCurrent) Color.White else Color.Transparent, RoundedCornerShape(8.dp))
+                                          )
+                                          Spacer(modifier = Modifier.height(4.dp))
+                                          Text(
+                                              text = "P$ph",
+                                              color = textColor,
+                                              fontSize = 8.sp,
+                                              fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                              fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
+                                          )
+                                      }
+                                  }
+                              }
+                          }
+                      }
+                  }
               }
               1 -> Box(modifier = mod) { EvezOsIntegration() }
               2 -> Column(modifier = mod) {
@@ -1720,6 +2332,7 @@ fun GeoDistributionChart() {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(text = "Geographical Resource Distribution", style = MaterialTheme.typography.bodySmall, color = SubTextColor, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(16.dp))
+            val localAccent = AccentColor
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val cw = size.width
                 val ch = size.height
@@ -1743,7 +2356,7 @@ fun GeoDistributionChart() {
 
                 // Render "Device" point
                 val devicePoint = Offset(cw * 0.3f, ch * 0.6f)
-                drawCircle(color = AccentColor, radius = 6.dp.toPx(), center = devicePoint)
+                drawCircle(color = localAccent, radius = 6.dp.toPx(), center = devicePoint)
 
                 // Render instances
                 val instances = listOf(

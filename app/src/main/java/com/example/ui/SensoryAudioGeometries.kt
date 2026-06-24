@@ -118,10 +118,10 @@ fun SensoryAudioGeometries(modifier: Modifier = Modifier) {
                 }
             }
         } else {
-             // Fallback simulation if no permission
+             // Fallback simulation if no permission - sync with global audio pulse!
              while(true) {
-                 delay(100)
-                 rawAudioPeak = Random.nextFloat() * 0.8f + 0.2f
+                 delay(16)
+                 rawAudioPeak = com.example.globalAudioPulse
              }
         }
     }
@@ -158,9 +158,9 @@ fun SensoryAudioGeometries(modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+        colors = CardDefaults.cardColors(containerColor = com.example.CardColor),
         shape = RoundedCornerShape(24.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF8E24AA))
+        border = androidx.compose.foundation.BorderStroke(1.dp, com.example.BorderColor)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(
@@ -177,7 +177,7 @@ fun SensoryAudioGeometries(modifier: Modifier = Modifier) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "SENSORY AUDIO GEOMETRIES",
-                        color = Color.White,
+                        color = com.example.TextColor,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp
                     )

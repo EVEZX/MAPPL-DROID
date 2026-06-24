@@ -37,6 +37,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.DomainEvent
 import com.example.Kernel
+import com.example.isDarkMode
+import com.example.BgColor
+import com.example.CardColor
+import com.example.TextColor
+import com.example.BorderColor
+import com.example.AccentColor
+import com.example.SubTextColor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.cos
@@ -112,9 +119,9 @@ fun EvezVisualCognitionPanel(isActive: Boolean) {
         modifier = Modifier
             .fillMaxWidth()
             .testTag("evez_vcl_panel"),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF070F1E)),
+        colors = CardDefaults.cardColors(containerColor = CardColor),
         shape = RoundedCornerShape(24.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF162A45))
+        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
             // Header Info
@@ -133,7 +140,7 @@ fun EvezVisualCognitionPanel(isActive: Boolean) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "EVEZ-VCL COGNITION PATHWAYS",
-                        color = Color.White,
+                        color = TextColor,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold
                     )
@@ -165,8 +172,8 @@ fun EvezVisualCognitionPanel(isActive: Boolean) {
                     .fillMaxWidth()
                     .height(180.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFF030811))
-                    .border(1.dp, Color(0xFF0F1E36), RoundedCornerShape(16.dp))
+                    .background(BgColor)
+                    .border(1.dp, BorderColor, RoundedCornerShape(16.dp))
             ) {
                 // Interactive Canvas drawing real-time floating visual nodes, connections, and scanning lines
                 Canvas(modifier = Modifier.fillMaxSize()) {
@@ -177,7 +184,7 @@ fun EvezVisualCognitionPanel(isActive: Boolean) {
                     val gridSpacing = 24.dp.toPx()
                     for (x in 0..(w / gridSpacing).toInt()) {
                         drawLine(
-                            color = Color(0xFF0E1A2B),
+                            color = if (isDarkMode) Color(0xFF0E1A2B) else Color(0xFFE5E7EB),
                             start = Offset(x * gridSpacing, 0f),
                             end = Offset(x * gridSpacing, h),
                             strokeWidth = 0.5.dp.toPx()
@@ -185,7 +192,7 @@ fun EvezVisualCognitionPanel(isActive: Boolean) {
                     }
                     for (y in 0..(h / gridSpacing).toInt()) {
                         drawLine(
-                            color = Color(0xFF0E1A2B),
+                            color = if (isDarkMode) Color(0xFF0E1A2B) else Color(0xFFE5E7EB),
                             start = Offset(0f, y * gridSpacing),
                             end = Offset(w, y * gridSpacing),
                             strokeWidth = 0.5.dp.toPx()
@@ -505,7 +512,7 @@ fun EvezVisualCognitionPanel(isActive: Boolean) {
             Text(
                 text = "VCL CORE COGNITION LAYER MATRIX STATUS:",
                 style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF8A99AD),
+                color = SubTextColor,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(6.dp))
@@ -513,8 +520,8 @@ fun EvezVisualCognitionPanel(isActive: Boolean) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF03070E), RoundedCornerShape(12.dp))
-                    .border(1.dp, Color(0xFF0F1B2C), RoundedCornerShape(12.dp))
+                    .background(BgColor, RoundedCornerShape(12.dp))
+                    .border(1.dp, BorderColor, RoundedCornerShape(12.dp))
                     .padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -567,7 +574,7 @@ fun EvezVisualCognitionPanel(isActive: Boolean) {
             Text(
                 text = "VCL CONSOLE METRIC RUNTIME:",
                 style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF8A99AD),
+                color = SubTextColor,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(4.dp))
@@ -576,8 +583,8 @@ fun EvezVisualCognitionPanel(isActive: Boolean) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(60.dp)
-                    .background(Color(0xFF010408), RoundedCornerShape(10.dp))
-                    .border(1.dp, Color(0xFF09111D), RoundedCornerShape(10.dp))
+                    .background(BgColor, RoundedCornerShape(10.dp))
+                    .border(1.dp, BorderColor, RoundedCornerShape(10.dp))
                     .padding(8.dp)
             ) {
                 Column(
