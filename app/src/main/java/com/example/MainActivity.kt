@@ -46,7 +46,6 @@ import android.media.AudioFormat
 import android.media.AudioTrack
 import androidx.compose.animation.core.*
 import kotlinx.coroutines.isActive
-import android.media.AudioTrack
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -185,7 +184,7 @@ fun startRetroChiptuneEngine(
             val noteDurationSamples = sampleRate / 6 // 6 notes per second
             val buffer = ShortArray(noteDurationSamples)
 
-            while (isRunning && kotlinx.coroutines.isActive) {
+            while (isRunning && isActive) {
                 val noteFreq = notes[noteIndex % notes.size]
                 val chord = chordProgressions[(noteIndex / 4) % chordProgressions.size]
                 
@@ -237,7 +236,7 @@ fun startRetroChiptuneEngine(
         // Fallback procedural animation generator if audio track is not supported
         scope.launch(kotlinx.coroutines.Dispatchers.Default) {
             var t = 0f
-            while (isRunning && kotlinx.coroutines.isActive) {
+            while (isRunning && isActive) {
                 val value = 0.3f + 0.5f * kotlin.math.sin(t).coerceIn(-1f, 1f)
                 onPeak(value)
                 t += 0.2f
